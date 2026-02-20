@@ -1,15 +1,28 @@
-transformers
-sentence-transformers
-pinecone-client
-pinecone-text
-requests
-typing-extensions==4.5.0
-python-dotenv
-beautifulsoup4
-numpy==1.26.0
-pytz
-nltk==3.8.1
-ollama
-redis
-langchain-experimental
-langchain-huggingface
+# Векторная БД
+chromadb>=0.4.22
+rank-bm25>=0.2.2
+
+# Reranker (cross-encoder для точного ранжирования)
+sentence-transformers>=2.2.2
+
+# Эмбеддинги
+transformers>=4.35.0
+
+# LLM клиент
+ollama>=0.1.7
+
+# Утилиты
+requests>=2.31.0
+python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
+numpy>=1.26.0,<2.0
+pytz>=2023.3
+nltk>=3.8.1
+redis>=5.0.0
+typing-extensions>=4.5.0
+langchain-experimental>=0.0.45
+langchain-huggingface>=0.0.3
+python-telegram-bot==20.7
+
+# Markdown парсинг/форматирование
+markdown>=3.5.0
