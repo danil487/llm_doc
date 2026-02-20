@@ -1,25 +1,32 @@
 # docker-compose.gpu.yml
-# Используется: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+version: '3.8'
+
+# ⚠️  ЗАПУСК: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 services:
   ollama:
+    # ✅ Явное указание GPU для Ollama
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all  # ← Все доступные GPU
               capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_DEBUG=true  # ← Логирование для отладки
 
   app:
-    # ChromaDB автоматически использует GPU если доступен (через ONNX Runtime)
-    # Добавляем переменную для явного включения
-    environment:
-      - CHROMA_GPU_ENABLED=true
+    # ✅ GPU для приложения (embedding + reranker)
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
+    environment:
+      - CHROMA_GPU_ENABLED=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - FORCE_CPU=false  # ← Разрешить GPU

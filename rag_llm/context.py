@@ -1,6 +1,5 @@
 # hybrid_search/context.py
 
-import redis
 import json
 import os
 from hybrid_search.utils import singleton, get_redis_client, logger

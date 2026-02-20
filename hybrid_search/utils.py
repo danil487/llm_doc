@@ -23,23 +23,26 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """Централизованная конфигурация RAG-пайплайна"""
-
     # ===== Поиск =====
-    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", 20))
+    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "20"))
 
     # ===== Ранжирование =====
-    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", 5))
-    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", 0.3))
+    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", "15"))  # ← Увеличили с 5 до 15
+    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", "0.3"))
     RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     # ===== Промпт =====
-    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", 2048))
+    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "2048"))
     INCLUDE_SECTION_IN_PROMPT: bool = os.getenv("INCLUDE_SECTION_IN_PROMPT", "true").lower() == "true"
 
     # ===== Ответ =====
     RESPONSE_FORMAT: str = os.getenv("RESPONSE_FORMAT", "markdown")
     ALWAYS_SHOW_SOURCES: bool = os.getenv("ALWAYS_SHOW_SOURCES", "true").lower() == "true"
-    MAX_SOURCE_LINKS: int = int(os.getenv("MAX_SOURCE_LINKS", 3))
+    MAX_SOURCE_LINKS: int = int(os.getenv("MAX_SOURCE_LINKS", "3"))
+
+    # ===== Расширение контекста (НОВОЕ) =====
+    SEARCH_NEIGHBOR_WINDOW: int = int(os.getenv("SEARCH_NEIGHBOR_WINDOW", "1"))
+    SEARCH_NEIGHBOR_SCORE_MULTIPLIER: float = float(os.getenv("SEARCH_NEIGHBOR_SCORE_MULTIPLIER", "0.8"))
 
     # ===== ChromaDB =====
     CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", "./chroma_db")
@@ -49,16 +52,30 @@ class Config:
     CONFLUENCE_URL: str = os.getenv("CONFLUENCE_URL", "").rstrip('/')
     CONFLUENCE_SPACE_NAME: str = os.getenv("CONFLUENCE_SPACE_NAME", "")
 
+    # ===== Telegram Bot =====
+    TELEGRAM_ENABLED: bool = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_WEBHOOK_URL: str = os.getenv("TELEGRAM_WEBHOOK_URL", "")
+    TELEGRAM_WEBHOOK_PORT: int = int(os.getenv("TELEGRAM_WEBHOOK_PORT", "8443"))
+
+    # ===== Redis =====
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_TTL_SECONDS: int = int(os.getenv("REDIS_TTL_SECONDS", "3600"))
+
     @classmethod
     def log(cls):
         """Логирование текущей конфигурации"""
         logger.info("📋 RAG Pipeline Config:")
         logger.info(f"   • Retrieval: top_k={cls.RETRIEVAL_TOP_K}")
         logger.info(f"   • Rerank: top_k={cls.RERANK_TOP_K}, min_score={cls.RERANK_MIN_SCORE}")
-        logger.info(f"   • Reranker model: {cls.RERANKER_MODEL}")
+        logger.info(
+            f"   • Neighbor expansion: window={cls.SEARCH_NEIGHBOR_WINDOW}, score_mult={cls.SEARCH_NEIGHBOR_SCORE_MULTIPLIER}")
         logger.info(
             f"   • Prompt: max_tokens={cls.MAX_CONTEXT_TOKENS}, include_section={cls.INCLUDE_SECTION_IN_PROMPT}")
         logger.info(f"   • Response: format={cls.RESPONSE_FORMAT}, always_sources={cls.ALWAYS_SHOW_SOURCES}")
+        logger.info(f"   • Telegram: enabled={cls.TELEGRAM_ENABLED}")
 
 
 def load_env_variable(var_name, default=None):

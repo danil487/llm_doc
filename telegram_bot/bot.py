@@ -1,11 +1,9 @@
 # telegram_bot/bot.py
 import os
-import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from hybrid_search.search import SemanticSearch
-from rag_llm.response import Response
-from hybrid_search.utils import singleton, logger, load_env_variable
+from hybrid_search.utils import singleton, logger, load_env_variable, Config
 
 
 @singleton
@@ -14,10 +12,19 @@ class TelegramBot:
         self.token = load_env_variable("TELEGRAM_BOT_TOKEN")
         self.webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "")
         self.webhook_port = int(os.getenv("TELEGRAM_WEBHOOK_PORT", 8443))
-        self.semantic = SemanticSearch()
-        self.response = Response()
+        self.semantic = None
+        self.response = None
         self.app = None
         logger.info(f"✅ TelegramBot инициализирован")
+
+    def _init_rag_components(self):
+        """✅ Инициализирует RAG-компоненты (вызывается в дочернем процессе)"""
+        if self.semantic is None:
+            from hybrid_search.search import SemanticSearch
+            from rag_llm.response import Response
+            self.semantic = SemanticSearch()
+            self.response = Response()
+            logger.info("✅ RAG-компоненты инициализированы для Telegram Bot")
 
     def _get_session_id(self, chat_id: int, user_id: int) -> str:
         """Генерирует уникальный session_id для Telegram-чата"""
@@ -58,33 +65,45 @@ class TelegramBot:
                 f"• Модель: `{os.getenv('OLLAMA_MODEL', 'llama3.1')}`"
             )
         except Exception as e:
+            logger.error(f"❌ Ошибка status_command: {e}")
             await update.message.reply_text(f"⚠️ Ошибка получения статуса: {e}")
 
     async def clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик /clear"""
-        chat_id = update.effective_chat.id
-        user_id = update.effective_user.id
-        session_id = self._get_session_id(chat_id, user_id)
+        try:
+            self._init_rag_components()  # ✅ Инициализация перед использованием
+            chat_id = update.effective_chat.id
+            user_id = update.effective_user.id
+            session_id = self._get_session_id(chat_id, user_id)
 
-        self.response.terminate(session_id)
-        await update.message.reply_text("🧹 *История диалога очищена.*")
+            self.response.terminate(session_id)
+            await update.message.reply_text("🧹 *История диалога очищена.*")
+        except Exception as e:
+            logger.error(f"❌ Ошибка clear_command: {e}")
+            await update.message.reply_text("⚠️ Ошибка при очистке истории")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка текстовых сообщений"""
-        chat_id = update.effective_chat.id
-        user_id = update.effective_user.id
-        query = update.message.text.strip()
-        session_id = self._get_session_id(chat_id, user_id)
-
-        if not query:
-            return
-
-        # Индикатор "печатает..."
-        await update.message.chat.send_action(action="typing")
-
         try:
+            chat_id = update.effective_chat.id
+            user_id = update.effective_user.id
+            query = update.message.text.strip()
+            session_id = self._get_session_id(chat_id, user_id)
+
+            if not query:
+                return
+
+            # ✅ Инициализация RAG-компонентов в первом запросе
+            self._init_rag_components()
+
+            # Индикатор "печатает..."
+            await update.message.chat.send_action(action="typing")
+
             logger.info(f"🔍 Telegram запрос от {chat_id}: {query[:100]}")
-            matches = self.semantic.search(query)
+
+            # ✅ Асинхронный вызов блокирующих операций
+            loop = asyncio.get_event_loop()
+            matches = await loop.run_in_executor(None, self.semantic.search, query)
 
             if not matches.get('matches'):
                 await update.message.reply_text(
@@ -96,7 +115,13 @@ class TelegramBot:
                 )
                 return
 
-            answer = self.response.query_model(session_id, query, matches)
+            answer = await loop.run_in_executor(
+                None,
+                self.response.query_model,
+                session_id,
+                query,
+                matches
+            )
 
             # Telegram лимит 4096 символов
             if len(answer) > 4000:

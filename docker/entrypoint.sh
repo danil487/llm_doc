@@ -8,6 +8,17 @@ OLLAMA_URL="${OLLAMA_HOST:-http://ollama:11434}"
 
 echo "🔍 Проверка модели: $MODEL"
 
+# Проверка доступности Ollama
+for i in {1..30}; do
+    if curl -s "$OLLAMA_URL/api/tags" > /dev/null 2>&1; then
+        echo "✅ Ollama доступен"
+        break
+    fi
+    echo "⏳ Ожидание Ollama... ($i/30)"
+    sleep 2
+done
+
+# Проверка модели
 if curl -s "$OLLAMA_URL/api/tags" | grep -q "$MODEL"; then
     echo "✅ Модель '$MODEL' загружена"
 else

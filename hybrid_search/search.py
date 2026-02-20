@@ -1,81 +1,58 @@
 # hybrid_search/search.py
+from hybrid_search.database import Database
+from hybrid_search.embed import Embed
+from hybrid_search.utils import singleton, logger, Config
+from typing import Dict, List
 
-from hybrid_search import database, embed
-from hybrid_search.utils import logger, Config
-from typing import List, Dict, Optional
 
-
+@singleton
 class SemanticSearch:
     def __init__(self):
-        self.db = database.Database()
-        self.embedder = embed.Embed()
+        self.db = Database()
+        self.embedder = Embed()
         logger.info("✅ SemanticSearch инициализирован")
 
-    def search(self, query: str,
-               where_filter: Optional[Dict] = None,
-               use_rerank: bool = True) -> Dict:
-        """
-        Полный пайплайн поиска: retrieval → rerank → format.
-
-        Args:
-            query: Поисковый запрос
-            where_filter: Фильтр по метаданным (ChromaDB where-синтаксис)
-            use_rerank: Использовать ли cross-encoder reranking
-
-        Returns:
-            Dict с полями: matches (список чанков), query, metadata
-        """
+    def search(self, query: str, n_results: int = None) -> Dict:
+        """Поиск с расширением контекста соседними чанками"""
         try:
-            # 1. Векторизация запроса
+            n_results = n_results or Config.RETRIEVAL_TOP_K
+
             dense_vector = self.embedder.embed_text(query)
             sparse_vector = self.embedder.embed_sparse(query)
 
-            # 2. Первичный поиск (retrieval)
-            chunks = self.db.search(
-                dense_vector=dense_vector,
-                sparse_vector=sparse_vector,
-                n_results=Config.RETRIEVAL_TOP_K,
-                where=where_filter
-            )
+            matches = self.db.search(dense_vector, sparse_vector, n_results=n_results)
 
-            if not chunks:
-                logger.warning("⚠️  Поиск не вернул результатов")
+            if not matches:
                 return {'matches': [], 'query': query}
 
-            logger.debug(f"🔍 Retrieval: найдено {len(chunks)} чанков")
+            # ✅ РАСШИРЕНИЕ СОСЕДЯМИ
+            expanded_matches = self._expand_with_neighbors(matches, window=Config.SEARCH_NEIGHBOR_WINDOW)
 
-            # 3. Ранжирование (reranking)
-            if use_rerank and Config.RERANK_TOP_K > 0:
-                chunks = self.embedder.rerank(query, chunks)
-                logger.debug(f"🔄 Rerank: осталось {len(chunks)} чанков после фильтрации")
+            # Reranking
+            reranked = self.embedder.rerank(query, expanded_matches)
 
-            # 4. Форматирование результата
-            matches = []
-            for chunk in chunks:
-                match = {
-                    'id': chunk.get('id'),
-                    'score': chunk.get('rerank_score') or chunk.get('score', 0),
-                    'text': chunk.get('text', ''),
-                    'metadata': {
-                        'title': chunk.get('metadata', {}).get('title', ''),
-                        'section': chunk.get('metadata', {}).get('section', ''),
-                        'url': chunk.get('metadata', {}).get('url', ''),
-                        'document_id': chunk.get('metadata', {}).get('document_id', ''),
-                        'content': chunk.get('metadata', {}).get('content', '')  # текст чанка
-                    }
-                }
-                matches.append(match)
-
-            return {
-                'matches': matches,
-                'query': query,
-                'metadata': {
-                    'retrieved': len(chunks),
-                    'reranked': use_rerank,
-                    'model': Config.RERANKER_MODEL
-                }
-            }
-
+            return {'matches': reranked, 'query': query}
         except Exception as e:
             logger.error(f"❌ Ошибка поиска: {e}")
             return {'matches': [], 'query': query, 'error': str(e)}
+
+    def _expand_with_neighbors(self, matches: List[Dict], window: int = 1) -> List[Dict]:
+        """✅ Добавляет соседние чанки к результатам поиска"""
+        expanded = []
+        seen_ids = set()
+
+        for match in matches:
+            chunk_id = match['id']
+
+            if chunk_id not in seen_ids:
+                expanded.append(match)
+                seen_ids.add(chunk_id)
+
+            neighbors = self.db.get_neighbors(chunk_id, window=window)
+            for neighbor in neighbors:
+                if neighbor['id'] not in seen_ids:
+                    neighbor['score'] = match['score'] * Config.SEARCH_NEIGHBOR_SCORE_MULTIPLIER
+                    expanded.append(neighbor)
+                    seen_ids.add(neighbor['id'])
+
+        return sorted(expanded, key=lambda x: x.get('score', 0), reverse=True)
