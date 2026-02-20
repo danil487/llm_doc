@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+.idea
 
 # Distribution / packaging
 .Python
@@ -183,5 +184,15 @@ go.work.sum
 
 # env file
 .env
+/app/data
+
+.ollama/
+.cache/
+/app/data/
+chroma_db/
+*.sqlite3
 
 *.rdb
+
+*.tar.gz
+*.tar.gz.chroma

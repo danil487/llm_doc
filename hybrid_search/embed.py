@@ -1,28 +1,136 @@
-from sentence_transformers import SentenceTransformer
-from pinecone_text.sparse import BM25Encoder
-from hybrid_search.utils import singleton
+# hybrid_search/embed.py
+
+from sentence_transformers import SentenceTransformer, CrossEncoder
+from rank_bm25 import BM25Okapi
+from hybrid_search.utils import singleton, logger, Config
+import re
+
 
 @singleton
 class Embed:
     def __init__(self):
-        self.dense_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-        self.sparse_model = BM25Encoder().default()
+        # Dense embedding модель
+        logger.info("🔧 Загрузка embedding модели...")
+        self.dense_model = SentenceTransformer(
+            "sentence-transformers/all-mpnet-base-v2",
+            device='cpu'
+        )
 
-    def embed_text(self, text):
-        dense_embeddings = self.dense_model.encode(text, convert_to_tensor=True)
-        
+        # Reranker (cross-encoder) для точного ранжирования
+        logger.info(f"🔧 Загрузка reranker модели: {Config.RERANKER_MODEL}")
+        self.reranker = CrossEncoder(Config.RERANKER_MODEL, device='cpu')
+
+        # Sparse: BM25
+        self.bm25 = None
+        self.corpus_tokens = []
+        self._bm25_initialized = False
+
+        logger.info("✅ Embed + Reranker готовы")
+
+    def _tokenize(self, text: str) -> list[str]:
+        """Токенизация для BM25"""
+        return re.findall(r'\b[a-zа-яё0-9]{2,}\b', text.lower())
+
+    def embed_text(self, text: str) -> list[float]:
+        """Возвращает dense-вектор (768-dim)"""
+        dense_embeddings = self.dense_model.encode(
+            text,
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        dense_vector = dense_embeddings.tolist()
+
+        if isinstance(dense_vector[0], list):
+            dense_vector = dense_vector[0]
+
+        return dense_vector
+
+    def embed_sparse(self, text: str) -> dict:
+        """Возвращает sparse-вектор для BM25"""
+        tokens = self._tokenize(text)
+
+        if self._bm25_initialized and self.bm25 and tokens:
+            scores = self.bm25.get_scores(tokens)
+            indices = [i for i, s in enumerate(scores) if s > 1e-6]
+            values = [float(scores[i]) for i in indices]
+        else:
+            indices, values = [0], [1e-9]
+
+        return {"indices": indices, "values": values}
+
+    def rerank(self, query: str, chunks: list[dict]) -> list[dict]:
+        """
+        Ранжирует чанки с помощью cross-encoder.
+
+        Args:
+            query: Поисковый запрос
+            chunks: Список чанков с полями: text, metadata, score (опционально)
+
+        Returns:
+            Отсортированный список чанков (по убыванию релевантности)
+        """
+        if not chunks:
+            return []
+
+        # Формируем пары (query, chunk_text) для reranker
+        pairs = [[query, chunk.get('text', chunk.get('content', ''))] for chunk in chunks]
+
+        # Предсказываем scores (0.0 - 1.0)
         try:
-            sparse_embeddings = self.sparse_model.encode_documents([text])[0]
-            if not sparse_embeddings['indices']:
-                raise ValueError("Empty or invalid sparse vector")
-        except Exception:
-            sparse_embeddings = {
-                "indices": [0], 
-                "values": [1e-9]  
-            }
+            scores = self.reranker.predict(pairs)
+        except Exception as e:
+            logger.error(f"❌ Ошибка rerank: {e}")
+            # Fallback: сортировка по исходному score
+            return sorted(chunks, key=lambda x: x.get('score', 0), reverse=True)
 
-        return dense_embeddings.tolist(), sparse_embeddings
+        # Добавляем rerank_score к чанкам
+        for chunk, score in zip(chunks, scores):
+            chunk['rerank_score'] = float(score)
 
-# Example usage:
-# embedder = Embed()
-# print(embedder.embed_text("This is a test message"))
+        # Фильтруем по порогу и сортируем
+        filtered = [c for c in chunks if c.get('rerank_score', 0) >= Config.RERANK_MIN_SCORE]
+        sorted_chunks = sorted(filtered, key=lambda x: x.get('rerank_score', 0), reverse=True)
+
+        # Возвращаем топ-K
+        return sorted_chunks[:Config.RERANK_TOP_K]
+
+    def fit_bm25(self, documents: list[str]):
+        """Инициализация BM25 на корпусе документов"""
+        if not documents:
+            logger.warning("⚠️  Нет документов для инициализации BM25")
+            return
+
+        logger.info(f"🔧 Инициализация BM25 на {len(documents)} документах...")
+        corpus_tokens = [self._tokenize(doc) for doc in documents if doc and doc.strip()]
+        corpus_tokens = [t for t in corpus_tokens if t]
+
+        if corpus_tokens:
+            self.bm25 = BM25Okapi(corpus_tokens)
+            self.corpus_tokens = corpus_tokens
+            self._bm25_initialized = True
+            total_tokens = sum(len(t) for t in corpus_tokens)
+            logger.info(f"✅ BM25 инициализирован: {len(corpus_tokens)} документов, {total_tokens} токенов")
+        else:
+            logger.warning("⚠️  BM25 не инициализирован")
+
+    def embed_texts_batch(self, texts: list[str]) -> list[list[float]]:
+        """Пакетная генерация эмбеддингов (быстрее в 5-10 раз)"""
+        if not texts:
+            return []
+        dense_embeddings = self.dense_model.encode(
+            texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            batch_size=32,  # ← Батч!
+            show_progress_bar=False
+        )
+        if len(dense_embeddings.shape) == 1:
+            dense_embeddings = dense_embeddings.reshape(1, -1)
+        return dense_embeddings.tolist()
+
+    def embed_sparse_batch(self, texts: list[str]) -> list[dict]:
+        """Пакетная генерация sparse-векторов"""
+        results = []
+        for text in texts:
+            results.append(self.embed_sparse(text))
+        return results

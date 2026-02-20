@@ -1,0 +1,92 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: llm-retrieval-app
+    environment:
+      - FORCE_RELOAD=${FORCE_RELOAD:-false}
+      - SKIP_LOAD=${SKIP_LOAD:-false}
+      - ENABLE_PERIODIC_SYNC=${ENABLE_PERIODIC_SYNC:-true}
+      - CHROMA_DB_PATH=/app/data/chroma_db
+      - CHROMA_COLLECTION=${CHROMA_COLLECTION:-confluence_index}
+      - CONFLUENCE_URL=${CONFLUENCE_URL}
+      - CONFLUENCE_USERNAME=${CONFLUENCE_USERNAME}
+      - CONFLUENCE_API_KEY=${CONFLUENCE_API_KEY}
+      - CONFLUENCE_SPACE_NAME=${CONFLUENCE_SPACE_NAME}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_TTL_SECONDS=3600
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONUNBUFFERED=1
+      - TOKENIZERS_PARALLELISM=true
+      - TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-false}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
+      - TELEGRAM_WEBHOOK_PORT=8443
+    ports:
+      - "8443:8443"  # Для Telegram webhook
+    volumes:
+      - ./logs:/app/logs
+      - chroma-data:/app/data/chroma_db
+      - hf-cache:/app/.cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+
+  redis:
+    image: redis:7-alpine
+    container_name: llm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  chroma-data:
+  ollama-data:
+  redis-data:
+  hf-cache:

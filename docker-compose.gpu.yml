@@ -1,0 +1,25 @@
+# docker-compose.gpu.yml
+# Используется: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  app:
+    # ChromaDB автоматически использует GPU если доступен (через ONNX Runtime)
+    # Добавляем переменную для явного включения
+    environment:
+      - CHROMA_GPU_ENABLED=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
