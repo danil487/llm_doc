@@ -1,9 +1,9 @@
 # hybrid_search/database.py
 import chromadb
 from chromadb.config import Settings
-from hybrid_search.utils import singleton, logger, Config, extract_metadata_from_confluence
+from hybrid_search.utils import singleton, logger, Config
 import os
-import json
+import json  # ← Добавить
 from typing import Optional, Dict, Any, List
 
 
@@ -45,30 +45,65 @@ class Database:
             self.collection.delete(ids=items['ids'])
         logger.info("✅ База очищена")
 
+    def _serialize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """✅ Сериализует все списки в JSON-строки для ChromaDB"""
+        clean_metadata = {}
+        for k, v in metadata.items():
+            if isinstance(v, list):
+                if len(v) == 0:
+                    continue  # Пропускаем пустые списки
+                clean_metadata[k] = json.dumps(v)  # ← Сериализуем
+            elif v is None:
+                continue  # Пропускаем None
+            elif isinstance(v, (str, int, float, bool)):
+                clean_metadata[k] = v
+            else:
+                clean_metadata[k] = str(v)
+        return clean_metadata
+
+    def _deserialize_metadata(self, raw_metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """✅ Десериализует JSON-строки обратно в списки"""
+        if not raw_metadata:
+            return {}
+
+        metadata = {}
+        for k, v in raw_metadata.items():
+            if isinstance(v, str):
+                # Пробуем распарсить как JSON
+                if v.startswith('[') or v.startswith('{'):
+                    try:
+                        metadata[k] = json.loads(v)
+                    except:
+                        metadata[k] = v
+                else:
+                    metadata[k] = v
+            else:
+                metadata[k] = v
+        return metadata
+
     def upsert_page(self, chunk_id: str, dense_vector: list, sparse_vector: dict,
                     text: str, metadata: Dict[str, Any]):
         """Добавление/обновление чанка с расширенными метаданными"""
         try:
-            # ✅ Очистка метаданных от пустых списков (ChromaDB не принимает [])
+            # ✅ Сериализация метаданных
             clean_metadata = {
                 'content': text,
-                'sparse_indices': json.dumps(sparse_vector['indices']),
-                'sparse_values': json.dumps(sparse_vector['values'])
+                'sparse_indices': json.dumps(sparse_vector['indices']),  # ← JSON
+                'sparse_values': json.dumps(sparse_vector['values'])  # ← JSON
             }
 
-            # Добавляем пользовательские метаданные, пропуская пустые списки
+            # Добавляем пользовательские метаданные
             for k, v in metadata.items():
                 if isinstance(v, list) and len(v) == 0:
-                    continue  # Пропускаем пустые списки
+                    continue
                 if v is None:
-                    continue  # Пропускаем None
-
+                    continue
                 if isinstance(v, list):
-                    clean_metadata[k] = json.dumps(v)
+                    clean_metadata[k] = json.dumps(v)  # ← Сериализуем
                 elif isinstance(v, (str, int, float, bool)):
                     clean_metadata[k] = v
                 else:
-                    clean_metadata[k] = str(v)  # Конвертируем остальное в строку
+                    clean_metadata[k] = str(v)
 
             if isinstance(dense_vector[0], list):
                 dense_vector = dense_vector[0]
@@ -85,40 +120,27 @@ class Database:
 
     def search(self, dense_vector: list, sparse_vector: dict,
                n_results: int = None, where: Dict = None) -> List[Dict]:
-        """
-        Поиск с поддержкой фильтрации по метаданным.
-        """
+        """Поиск с поддержкой фильтрации по метаданным"""
         try:
-            from collections import defaultdict
             n_results = n_results or Config.RETRIEVAL_TOP_K
 
             if isinstance(dense_vector[0], list):
                 dense_vector = dense_vector[0]
 
-            # Dense-поиск с фильтрацией
             dense_results = self.collection.query(
                 query_embeddings=[dense_vector],
-                n_results=n_results * 2,  # Берём больше для rerank
+                n_results=n_results * 2,
                 where=where,
                 include=['metadatas', 'documents', 'distances']
             )
 
-            # Формируем список чанков для rerank
             chunks = []
             if dense_results.get('ids') and dense_results['ids'][0]:
                 for i, doc_id in enumerate(dense_results['ids'][0]):
                     raw_metadata = dense_results['metadatas'][0][i] if dense_results.get('metadatas') else {}
 
-                    # ✅ ДЕСЕРИАЛИЗАЦИЯ JSON-строк обратно в списки
-                    metadata = {}
-                    for k, v in raw_metadata.items():
-                        if k in ['sparse_indices', 'sparse_values']:
-                            try:
-                                metadata[k] = json.loads(v) if isinstance(v, str) else v
-                            except:
-                                metadata[k] = v
-                        else:
-                            metadata[k] = v
+                    # ✅ Десериализация метаданных
+                    metadata = self._deserialize_metadata(raw_metadata)
 
                     chunk = {
                         'id': doc_id,
@@ -142,6 +164,42 @@ class Database:
             logger.error(f"❌ Ошибка поиска: {e}")
             return []
 
+    def get_neighbors(self, chunk_id: str, window: int = 1) -> List[Dict]:
+        """✅ ПОЛУЧЕНИЕ СОСЕДНИХ ЧАНКОВ (решает проблему фрагментации)"""
+        neighbors = []
+        parts = chunk_id.rsplit('-', 1)
+        if len(parts) != 2:
+            return neighbors
+
+        page_id, chunk_num = parts[0], int(parts[1])
+
+        for offset in range(-window, window + 1):
+            if offset == 0:
+                continue
+
+            neighbor_id = f"{page_id}-{chunk_num + offset}"
+            try:
+                result = self.collection.get(
+                    ids=[neighbor_id],
+                    include=['metadatas', 'documents']
+                )
+                if result['ids'] and result['ids'][0]:
+                    raw_metadata = result['metadatas'][0][0] if result.get('metadatas') else {}
+                    metadata = self._deserialize_metadata(raw_metadata)
+
+                    neighbors.append({
+                        'id': neighbor_id,
+                        'text': result['documents'][0][0] if result.get('documents') else '',
+                        'metadata': metadata,
+                        'is_neighbor': True,
+                        'offset': offset
+                    })
+            except Exception as e:
+                logger.debug(f"⚠️  Сосед {neighbor_id} не найден: {e}")
+                continue
+
+        return neighbors
+
     def get_text(self, id: str) -> str:
         """Получение текста по ID"""
         try:
@@ -157,54 +215,7 @@ class Database:
         try:
             result = self.collection.get(ids=[id], include=['metadatas'])
             if result['metadatas'] and result['metadatas'][0]:
-                raw_metadata = result['metadatas'][0]
-                # ✅ ДЕСЕРИАЛИЗАЦИЯ
-                metadata = {}
-                for k, v in raw_metadata.items():
-                    if k in ['sparse_indices', 'sparse_values']:
-                        try:
-                            metadata[k] = json.loads(v) if isinstance(v, str) else v
-                        except:
-                            metadata[k] = v
-                    else:
-                        metadata[k] = v
-                return metadata
+                return self._deserialize_metadata(result['metadatas'][0])
         except Exception as e:
             logger.error(f"❌ Ошибка получения метаданных {id}: {e}")
         return None
-
-    def upsert_batch(self, chunk_ids: list[str], dense_vectors: list[list[float]],
-                     sparse_vectors: list[dict], texts: list[str],
-                     metadatas: list[Dict[str, Any]]):
-        """Пакетная запись в ChromaDB"""
-        import json
-        try:
-            clean_metadatas = []
-            for metadata, sparse_vector in zip(metadatas, sparse_vectors):
-                clean_metadata = {
-                    'content': texts[metadatas.index(metadata)],
-                    'sparse_indices': json.dumps(sparse_vector['indices']),
-                    'sparse_values': json.dumps(sparse_vector['values'])
-                }
-                for k, v in metadata.items():
-                    if isinstance(v, list) and len(v) == 0:
-                        continue
-                    if v is None:
-                        continue
-                    if isinstance(v, list):
-                        clean_metadata[k] = json.dumps(v)
-                    elif isinstance(v, (str, int, float, bool)):
-                        clean_metadata[k] = v
-                    else:
-                        clean_metadata[k] = str(v)
-                clean_metadatas.append(clean_metadata)
-
-            self.collection.upsert(
-                ids=chunk_ids,
-                embeddings=dense_vectors,
-                metadatas=clean_metadatas,
-                documents=texts
-            )
-        except Exception as e:
-            logger.error(f"❌ Ошибка batch upsert: {e}")
-            raise

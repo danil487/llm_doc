@@ -1,31 +1,64 @@
 # hybrid_search/embed.py
-
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
 from hybrid_search.utils import singleton, logger, Config
 import re
+import os
 
 
 @singleton
 class Embed:
     def __init__(self):
+        # ✅ ОПРЕДЕЛЯЕМ устройство автоматически
+        self.device = self._get_device()
+        logger.info(f"🔧 Используемое устройство: {self.device}")
+
         # Dense embedding модель
         logger.info("🔧 Загрузка embedding модели...")
         self.dense_model = SentenceTransformer(
             "sentence-transformers/all-mpnet-base-v2",
-            device='cpu'
+            device=self.device  # ← ИСПРАВЛЕНО
         )
 
         # Reranker (cross-encoder) для точного ранжирования
         logger.info(f"🔧 Загрузка reranker модели: {Config.RERANKER_MODEL}")
-        self.reranker = CrossEncoder(Config.RERANKER_MODEL, device='cpu')
+        self.reranker = CrossEncoder(
+            Config.RERANKER_MODEL,
+            device=self.device  # ← ИСПРАВЛЕНО
+        )
 
         # Sparse: BM25
         self.bm25 = None
         self.corpus_tokens = []
         self._bm25_initialized = False
-
         logger.info("✅ Embed + Reranker готовы")
+
+    def _get_device(self) -> str:
+        """✅ Автоматическое определение доступного устройства"""
+        # Проверяем переменную окружения
+        force_cpu = os.getenv("FORCE_CPU", "false").lower() == "true"
+        if force_cpu:
+            logger.info("⚠️  Принудительное использование CPU (FORCE_CPU=true)")
+            return "cpu"
+
+        # Проверяем CUDA
+        try:
+            import torch
+            if torch.cuda.is_available():
+                device = "cuda"
+                gpu_name = torch.cuda.get_device_name(0)
+                gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
+                logger.info(f"✅ CUDA доступна: {gpu_name} ({gpu_memory:.1f} GB)")
+                return device
+            else:
+                logger.warning("⚠️  CUDA не доступна, используем CPU")
+                return "cpu"
+        except ImportError:
+            logger.warning("⚠️  PyTorch не установлен, используем CPU")
+            return "cpu"
+        except Exception as e:
+            logger.warning(f"⚠️  Ошибка проверки CUDA: {e}, используем CPU")
+            return "cpu"
 
     def _tokenize(self, text: str) -> list[str]:
         """Токенизация для BM25"""
@@ -39,36 +72,23 @@ class Embed:
             normalize_embeddings=True
         )
         dense_vector = dense_embeddings.tolist()
-
         if isinstance(dense_vector[0], list):
             dense_vector = dense_vector[0]
-
         return dense_vector
 
     def embed_sparse(self, text: str) -> dict:
         """Возвращает sparse-вектор для BM25"""
         tokens = self._tokenize(text)
-
         if self._bm25_initialized and self.bm25 and tokens:
             scores = self.bm25.get_scores(tokens)
             indices = [i for i, s in enumerate(scores) if s > 1e-6]
             values = [float(scores[i]) for i in indices]
         else:
             indices, values = [0], [1e-9]
-
         return {"indices": indices, "values": values}
 
     def rerank(self, query: str, chunks: list[dict]) -> list[dict]:
-        """
-        Ранжирует чанки с помощью cross-encoder.
-
-        Args:
-            query: Поисковый запрос
-            chunks: Список чанков с полями: text, metadata, score (опционально)
-
-        Returns:
-            Отсортированный список чанков (по убыванию релевантности)
-        """
+        """Ранжирует чанки с помощью cross-encoder"""
         if not chunks:
             return []
 
@@ -117,13 +137,15 @@ class Embed:
         """Пакетная генерация эмбеддингов (быстрее в 5-10 раз)"""
         if not texts:
             return []
+
         dense_embeddings = self.dense_model.encode(
             texts,
             convert_to_numpy=True,
             normalize_embeddings=True,
-            batch_size=32,  # ← Батч!
+            batch_size=32,
             show_progress_bar=False
         )
+
         if len(dense_embeddings.shape) == 1:
             dense_embeddings = dense_embeddings.reshape(1, -1)
         return dense_embeddings.tolist()

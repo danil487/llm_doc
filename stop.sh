@@ -8,7 +8,7 @@ case "${1:-}" in
         read -p "Продолжить? [y/N] " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            docker-compose down -v
+            docker compose down -v
             echo "✅ Очистка завершена"
         else
             echo "⏭️  Отменено"
@@ -16,13 +16,13 @@ case "${1:-}" in
         ;;
     --down)
         echo "🔻 Остановка контейнеров..."
-        docker-compose down
+        docker compose down
         echo "✅ Готово"
         ;;
     *)
         echo "⏸️  Пауза контейнеров"
-        docker-compose pause
-        echo "💡 Возобновить: docker-compose unpause"
+        docker compose pause
+        echo "💡 Возобновить: docker compose unpause"
         echo "💡 Полная остановка: ./stop.sh --down"
         ;;
 esac

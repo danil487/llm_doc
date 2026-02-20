@@ -1,5 +1,4 @@
 # main.py
-
 from hybrid_search.search import SemanticSearch
 from hybrid_search.update import UpdateDatabase
 from hybrid_search.database import Database
@@ -10,11 +9,27 @@ import sys
 import uuid
 import time
 import signal
-from hybrid_search.utils import logger
+from hybrid_search.utils import logger, Config
 
-# Глобальные инстансы
-semantic = SemanticSearch()
-response = Response()
+# Они будут созданы в основном процессе при необходимости
+semantic = None
+response = None
+
+
+def get_semantic():
+    """✅ Ленивая инициализация SemanticSearch"""
+    global semantic
+    if semantic is None:
+        semantic = SemanticSearch()
+    return semantic
+
+
+def get_response():
+    """✅ Ленивая инициализация Response"""
+    global response
+    if response is None:
+        response = Response()
+    return response
 
 
 def is_first_run() -> bool:
@@ -38,7 +53,7 @@ def run_update():
     """Фоновая задача периодического обновления"""
     db = UpdateDatabase()
     try:
-        time.sleep(10)  # Даём основному процессу время на инициализацию
+        time.sleep(10)
         db.periodic_update(check_interval=300, max_pages_per_cycle=50)
     except Exception as e:
         logger.error(f"❌ Ошибка в фоновом обновлении: {e}")
@@ -57,7 +72,10 @@ def run_telegram_bot():
         return
 
     try:
+        # ✅ Импорты внутри функции (для дочернего процесса)
         from telegram_bot.bot import TelegramBot
+
+        # ✅ Инициализация бота внутри дочернего процесса
         bot = TelegramBot()
         bot.run()
     except Exception as e:
@@ -74,6 +92,9 @@ if __name__ == "__main__":
     logger.info(f"🆔 Session ID: {session_id}")
 
     os.environ['TOKENIZERS_PARALLELISM'] = 'true'
+
+    # ✅ Логирование конфигурации
+    Config.log()
 
     force_reload = os.getenv('FORCE_RELOAD', 'false').lower() == 'true'
     skip_load = os.getenv('SKIP_LOAD', 'false').lower() == 'true'
@@ -131,6 +152,7 @@ if __name__ == "__main__":
         # ===== Запуск Telegram-бота =====
         if os.getenv("TELEGRAM_ENABLED", "false").lower() == "true":
             logger.info("🤖 Запуск Telegram Bot...")
+            # ✅ daemon=True чтобы бот завершился с основным процессом
             tg_proc = Process(target=run_telegram_bot, daemon=True)
             tg_proc.start()
             logger.info(f"✅ Telegram Bot запущен (PID: {tg_proc.pid})")
@@ -146,7 +168,7 @@ if __name__ == "__main__":
                     logger.info("👋 Выход...")
                     break
                 elif query.lower() == '/clear':
-                    response.terminate(session_id)
+                    get_response().terminate(session_id)
                     logger.info("🧹 История очищена")
                     continue
                 elif query.lower() == '/help':
@@ -161,7 +183,7 @@ if __name__ == "__main__":
                     continue
 
                 logger.info("🔍 Поиск...")
-                matches = semantic.search(query)
+                matches = get_semantic().search(query)
 
                 if not matches.get('matches'):
                     logger.info("⚠️  Ничего не найдено")
@@ -169,7 +191,7 @@ if __name__ == "__main__":
 
                 logger.info("\n🤖 Ответ:")
                 logger.info("-" * 60)
-                answer = response.query_model(session_id, query, matches)
+                answer = get_response().query_model(session_id, query, matches)
                 logger.info(answer)
                 logger.info("-" * 60)
 
@@ -193,10 +215,13 @@ if __name__ == "__main__":
     finally:
         logger.info("\n🧹 Завершение...")
         if proc and proc.is_alive():
+            logger.info(f"⏹️  Остановка фона (PID: {proc.pid})")
             proc.terminate()
             proc.join(timeout=5)
         if tg_proc and tg_proc.is_alive():
+            logger.info(f"⏹️  Остановка Telegram Bot (PID: {tg_proc.pid})")
             tg_proc.terminate()
             tg_proc.join(timeout=5)
-        response.terminate(session_id)
+        if response:
+            response.terminate(session_id)
         logger.info("✅ Завершено")

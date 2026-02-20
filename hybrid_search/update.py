@@ -144,48 +144,33 @@ class UpdateDatabase:
         logger.info(f"🎉 Загрузка завершена: {len(page_data_cache)} страниц проиндексировано")
 
     def _process_text(self, page_id: str, text: str, metadata: Dict[str, Any]):
-        """Оптимизированная обработка с батчингом"""
+        """Внутренний метод обработки текста с метаданными"""
         try:
             chunks = self.chunker.split(text)
-            if not chunks:
-                return
-
             total_chunks = len(chunks)
 
-            # ✅ БАТЧИНГ эмбеддингов
-            dense_vectors = self.embedder.embed_texts_batch(chunks)
-            sparse_vectors = self.embedder.embed_sparse_batch(chunks)
-
-            # Пакетная запись в ChromaDB
-            chunk_ids = []
-            chunk_metadatas = []
-            chunk_texts = []
-
-            for num, (chunk_text, dense_vector, sparse_vector) in enumerate(
-                    zip(chunks, dense_vectors, sparse_vectors)
-            ):
+            for num, chunk_text in enumerate(chunks):
+                dense_vector = self.embedder.embed_text(chunk_text)
+                sparse_vector = self.embedder.embed_sparse(chunk_text)
                 chunk_id = f"{page_id}-{num}"
-                chunk_ids.append(chunk_id)
 
                 chunk_metadata = {
                     **metadata,
                     'chunk_index': num,
                     'total_chunks': total_chunks
                 }
-                # Удаляем пустые списки
+
+                # ✅ Удаляем пустые списки
                 chunk_metadata = {
                     k: v for k, v in chunk_metadata.items()
                     if not (isinstance(v, list) and len(v) == 0)
                 }
-                chunk_metadatas.append(chunk_metadata)
-                chunk_texts.append(chunk_text)
 
-            # ✅ ОДНА операция upsert вместо N
-            self.db.upsert_batch(chunk_ids, dense_vectors, sparse_vectors, chunk_texts, chunk_metadatas)
+                self.db.upsert_page(chunk_id, dense_vector, sparse_vector, chunk_text, chunk_metadata)
 
-            current_time = datetime.now(timezone.utc)
-            self.redis.setex(f'update_time:{page_id}', 86400 * 30, format_datetime(current_time))
-            logger.info(f"✅ Страница {page_id} обработана: {total_chunks} чанков")
+                current_time = datetime.now(timezone.utc)
+                self.redis.setex(f'update_time:{page_id}', 86400 * 30, format_datetime(current_time))
+
         except Exception as e:
             logger.error(f"❌ Ошибка при обработке {page_id}: {e}")
 
