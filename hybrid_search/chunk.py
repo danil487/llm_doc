@@ -1,30 +1,31 @@
 # hybrid_search/chunk.py
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from hybrid_search.utils import singleton, logger
+from hybrid_search.embed import Embed  # ← Используем общий Embed
+from hybrid_search.utils import singleton, logger, Config
 
 
 @singleton
 class SemanticChunk:
     def __init__(self):
+        self.embedder = Embed()
+
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=Config.CHUNK_SIZE,
+            chunk_overlap=Config.CHUNK_OVERLAP,
+            length_function=len,
+            separators=self._parse_separators()
+        )
+        self._use_langchain = True
+        logger.info(
+            f"✅ RecursiveCharacterTextSplitter инициализирован (size={Config.CHUNK_SIZE}, overlap={Config.CHUNK_OVERLAP})")
+
+    def _parse_separators(self) -> list[str]:
+        """Парсит CHUNK_SEPARATORS из строки в список"""
         try:
-            self.hf_embedder = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-mpnet-base-v2",
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            # ✅ БЫСТРЫЙ сплиттер вместо SemanticChunker
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=50,
-                length_function=len,
-                separators=["\n\n", "\n", ". ", " ", ""]
-            )
-            self._use_langchain = True
-            logger.info("✅ RecursiveCharacterTextSplitter инициализирован (быстрый)")
-        except Exception as e:
-            logger.warning(f"⚠️  LangChain не доступен: {e}")
-            self._use_langchain = False
+            separators = Config.CHUNK_SEPARATORS.split(',')
+            return [s.strip() for s in separators if s.strip()]
+        except:
+            return ["\n\n", "\n", ". ", " ", ""]
 
     def split(self, text: str) -> list[str]:
         if not text or not text.strip():
@@ -39,10 +40,14 @@ class SemanticChunk:
                 return self._fallback_split(text)
         return self._fallback_split(text)
 
-    def _fallback_split(self, text: str, max_chunk_size: int = 500) -> list[str]:
+    def _fallback_split(self, text: str, max_chunk_size: int = None) -> list[str]:
+        if max_chunk_size is None:
+            max_chunk_size = Config.CHUNK_SIZE
+
         chunks = []
         paragraphs = text.split('\n\n')
         current_chunk = ""
+
         for para in paragraphs:
             para = para.strip()
             if not para:
