@@ -25,7 +25,7 @@ class SemanticSearch:
             if not matches:
                 return {'matches': [], 'query': query}
 
-            # ✅ РАСШИРЕНИЕ СОСЕДЯМИ
+            # РАСШИРЕНИЕ СОСЕДЯМИ
             expanded_matches = self._expand_with_neighbors(matches, window=Config.SEARCH_NEIGHBOR_WINDOW)
 
             # Reranking

@@ -85,25 +85,13 @@ class Database:
                     text: str, metadata: Dict[str, Any]):
         """Добавление/обновление чанка с расширенными метаданными"""
         try:
-            # ✅ Сериализация метаданных
-            clean_metadata = {
+            full_metadata = {
                 'content': text,
-                'sparse_indices': json.dumps(sparse_vector['indices']),  # ← JSON
-                'sparse_values': json.dumps(sparse_vector['values'])  # ← JSON
+                'sparse_indices': sparse_vector['indices'],
+                'sparse_values': sparse_vector['values'],
+                **metadata
             }
-
-            # Добавляем пользовательские метаданные
-            for k, v in metadata.items():
-                if isinstance(v, list) and len(v) == 0:
-                    continue
-                if v is None:
-                    continue
-                if isinstance(v, list):
-                    clean_metadata[k] = json.dumps(v)  # ← Сериализуем
-                elif isinstance(v, (str, int, float, bool)):
-                    clean_metadata[k] = v
-                else:
-                    clean_metadata[k] = str(v)
+            clean_metadata = self._serialize_metadata(full_metadata)
 
             if isinstance(dense_vector[0], list):
                 dense_vector = dense_vector[0]
