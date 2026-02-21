@@ -65,6 +65,7 @@ class Config:
     CHUNK_SEPARATORS: str = os.getenv("CHUNK_SEPARATORS", "\n\n,\n,. , ,")
 
     # ===== Расширение контекста =====
+    MAX_CHUNKS_PER_DOC: int = int(os.getenv("MAX_CHUNKS_PER_DOC", "3"))
     SEARCH_NEIGHBOR_WINDOW: int = int(os.getenv("SEARCH_NEIGHBOR_WINDOW", "1"))
     SEARCH_NEIGHBOR_SCORE_MULTIPLIER: float = float(os.getenv("SEARCH_NEIGHBOR_SCORE_MULTIPLIER", "0.8"))
 
@@ -95,6 +96,7 @@ class Config:
         logger.info(f"   • Response: format={cls.RESPONSE_FORMAT}, sources={cls.ALWAYS_SHOW_SOURCES}")
         logger.info(f"   • Telegram: enabled={cls.TELEGRAM_ENABLED}")
         logger.info(f"   • Device: force_cpu={cls.FORCE_CPU}")
+        logger.info(f"   • Max chunks per doc: {cls.MAX_CHUNKS_PER_DOC}")
 
         # ✅ Проверка на переполнение контекста
         estimated_chunks = cls.RETRIEVAL_TOP_K * (cls.SEARCH_NEIGHBOR_WINDOW * 2 + 1)
