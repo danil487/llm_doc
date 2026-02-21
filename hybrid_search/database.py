@@ -3,7 +3,7 @@ import chromadb
 from chromadb.config import Settings
 from hybrid_search.utils import singleton, logger, Config
 import os
-import json  # ← Добавить
+import json
 from typing import Optional, Dict, Any, List
 
 

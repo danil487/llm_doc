@@ -1,3 +1,4 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
@@ -13,7 +14,6 @@ services:
       - CHROMA_DB_PATH=/app/data/chroma_db
       - CHROMA_COLLECTION=${CHROMA_COLLECTION:-confluence_index}
       - CONFLUENCE_URL=${CONFLUENCE_URL}
-      - CONFLUENCE_USERNAME=${CONFLUENCE_USERNAME}
       - CONFLUENCE_API_KEY=${CONFLUENCE_API_KEY}
       - CONFLUENCE_SPACE_NAME=${CONFLUENCE_SPACE_NAME}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
@@ -40,6 +40,7 @@ services:
       - MAX_SOURCE_LINKS=${MAX_SOURCE_LINKS:-3}
       - SEARCH_NEIGHBOR_WINDOW=${SEARCH_NEIGHBOR_WINDOW:-1}
       - SEARCH_NEIGHBOR_SCORE_MULTIPLIER=${SEARCH_NEIGHBOR_SCORE_MULTIPLIER:-0.8}
+      - FORCE_CPU=${FORCE_CPU:-false}
     ports:
       - "8443:8443"
     volumes:
