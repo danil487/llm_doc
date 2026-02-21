@@ -1,24 +1,26 @@
 # telegram_bot/bot.py
-import os
 import asyncio
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from hybrid_search.utils import singleton, logger, load_env_variable, Config
+
+from hybrid_search.utils import logger, Config
 
 
-@singleton
 class TelegramBot:
+    """✅ Telegram Bot """
+
     def __init__(self):
-        self.token = load_env_variable("TELEGRAM_BOT_TOKEN")
-        self.webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "")
-        self.webhook_port = int(os.getenv("TELEGRAM_WEBHOOK_PORT", 8443))
+        self.token = Config.TELEGRAM_BOT_TOKEN
+        self.webhook_url = Config.TELEGRAM_WEBHOOK_URL
+        self.webhook_port = Config.TELEGRAM_WEBHOOK_PORT
         self.semantic = None
         self.response = None
         self.app = None
-        logger.info(f"✅ TelegramBot инициализирован")
+        logger.info("✅ TelegramBot инициализирован")
 
     def _init_rag_components(self):
-        """✅ Инициализирует RAG-компоненты (вызывается в дочернем процессе)"""
+        """✅ Инициализирует RAG-компоненты (ленивая)"""
         if self.semantic is None:
             from hybrid_search.search import SemanticSearch
             from rag_llm.response import Response
@@ -62,7 +64,7 @@ class TelegramBot:
                 f"📊 *Статус системы:*\n\n"
                 f"• Документов в базе: `{count}`\n"
                 f"• Статус: ✅ Работает\n"
-                f"• Модель: `{os.getenv('OLLAMA_MODEL', 'llama3.1')}`"
+                f"• Модель: `{Config.OLLAMA_MODEL}`"
             )
         except Exception as e:
             logger.error(f"❌ Ошибка status_command: {e}")
@@ -71,11 +73,10 @@ class TelegramBot:
     async def clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик /clear"""
         try:
-            self._init_rag_components()  # ✅ Инициализация перед использованием
+            self._init_rag_components()
             chat_id = update.effective_chat.id
             user_id = update.effective_user.id
             session_id = self._get_session_id(chat_id, user_id)
-
             self.response.terminate(session_id)
             await update.message.reply_text("🧹 *История диалога очищена.*")
         except Exception as e:
@@ -98,7 +99,6 @@ class TelegramBot:
 
             # Индикатор "печатает..."
             await update.message.chat.send_action(action="typing")
-
             logger.info(f"🔍 Telegram запрос от {chat_id}: {query[:100]}")
 
             # ✅ Асинхронный вызов блокирующих операций
@@ -142,30 +142,26 @@ class TelegramBot:
         logger.error(f"❌ Telegram error: {context.error}")
 
     def run_polling(self):
-        """Запуск бота в режиме polling (для разработки)"""
+        """Запуск бота в режиме polling (рекомендуется)"""
         self.app = Application.builder().token(self.token).build()
-
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("help", self.help_command))
         self.app.add_handler(CommandHandler("status", self.status_command))
         self.app.add_handler(CommandHandler("clear", self.clear_command))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.app.add_error_handler(self.error_handler)
-
         logger.info("🚀 Telegram Bot запущен (polling mode)")
         self.app.run_polling(drop_pending_updates=True)
 
     def run_webhook(self):
-        """Запуск бота в режиме webhook (для продакшена)"""
+        """Запуск бота в режиме webhook (требует HTTPS)"""
         self.app = Application.builder().token(self.token).build()
-
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("help", self.help_command))
         self.app.add_handler(CommandHandler("status", self.status_command))
         self.app.add_handler(CommandHandler("clear", self.clear_command))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.app.add_error_handler(self.error_handler)
-
         logger.info(f"🚀 Telegram Bot запущен (webhook mode: {self.webhook_url})")
         self.app.run_webhook(
             listen="0.0.0.0",

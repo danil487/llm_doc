@@ -1,44 +1,21 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Запуск enhanced-llm-retrieval..."
+echo "🚀 Запуск RAG-системы..."
 
-MODEL="${OLLAMA_MODEL:-llama3.1}"
-OLLAMA_URL="${OLLAMA_HOST:-http://ollama:11434}"
-
-echo "🔍 Проверка модели: $MODEL"
-
-# Проверка доступности Ollama
-for i in {1..30}; do
-    if curl -s "$OLLAMA_URL/api/tags" > /dev/null 2>&1; then
-        echo "✅ Ollama доступен"
-        break
-    fi
-    echo "⏳ Ожидание Ollama... ($i/30)"
-    sleep 2
-done
-
-# Проверка модели
-if curl -s "$OLLAMA_URL/api/tags" | grep -q "$MODEL"; then
-    echo "✅ Модель '$MODEL' загружена"
-else
-    echo "⬇️  Загрузка модели (5-20 мин)..."
-    curl -X POST "$OLLAMA_URL/api/pull" \
-        -H "Content-Type: application/json" \
-        -d "{\"name\": \"$MODEL\"}"
-    echo "✅ Модель загружена"
+# Проверка переменных окружения
+if [ -z "$CONFLUENCE_API_KEY" ]; then
+    echo "❌ Ошибка: CONFLUENCE_API_KEY не установлен"
+    exit 1
 fi
 
-# Проверка Telegram токена
-if [ "${TELEGRAM_ENABLED}" = "true" ]; then
-    if [ -z "${TELEGRAM_BOT_TOKEN}" ]; then
-        echo "⚠️  TELEGRAM_ENABLED=true но TELEGRAM_BOT_TOKEN не установлен"
-        echo "💡 Отключаю Telegram Bot"
-        export TELEGRAM_ENABLED=false
-    else
-        echo "✅ Telegram Bot включён"
-    fi
+if [ -z "$TELEGRAM_BOT_TOKEN" ] && [ "$TELEGRAM_ENABLED" = "true" ]; then
+    echo "❌ Ошибка: TELEGRAM_BOT_TOKEN не установлен"
+    exit 1
 fi
 
-echo "🎯 Запуск main.py..."
-exec python3 main.py "$@"
+# Создание директорий
+mkdir -p /app/data/chroma_db /app/.cache /app/logs
+
+# Запуск приложения
+exec python /app/main.py
