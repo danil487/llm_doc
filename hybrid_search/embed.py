@@ -1,10 +1,11 @@
 # hybrid_search/embed.py
-from scipy.special import expit
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
 from hybrid_search.utils import singleton, logger, Config
 import re
 import os
+import numpy as np
+from scipy.special import expit
 
 
 @singleton
@@ -18,14 +19,14 @@ class Embed:
         logger.info("🔧 Загрузка embedding модели...")
         self.dense_model = SentenceTransformer(
             "sentence-transformers/all-mpnet-base-v2",
-            device=self.device  # ← ИСПРАВЛЕНО
+            device=self.device
         )
 
         # Reranker (cross-encoder) для точного ранжирования
         logger.info(f"🔧 Загрузка reranker модели: {Config.RERANKER_MODEL}")
         self.reranker = CrossEncoder(
             Config.RERANKER_MODEL,
-            device=self.device  # ← ИСПРАВЛЕНО
+            device=self.device
         )
 
         # Sparse: BM25
@@ -36,13 +37,11 @@ class Embed:
 
     def _get_device(self) -> str:
         """✅ Автоматическое определение доступного устройства"""
-        # Проверяем переменную окружения
         force_cpu = os.getenv("FORCE_CPU", "false").lower() == "true"
         if force_cpu:
             logger.info("⚠️  Принудительное использование CPU (FORCE_CPU=true)")
             return "cpu"
 
-        # Проверяем CUDA
         try:
             import torch
             if torch.cuda.is_available():
@@ -93,25 +92,29 @@ class Embed:
         if not chunks:
             return []
 
+        # Формируем пары (query, chunk_text) для reranker
         pairs = [[query, chunk.get('text', chunk.get('content', ''))] for chunk in chunks]
 
+        # Предсказываем scores
         try:
             scores = self.reranker.predict(pairs)
 
-            # ✅ ПРИМЕНЯЕМ SIGMOID для нормализации в 0-1
-            scores = expit(scores)  # или 1 / (1 + np.exp(-scores))
+            # ПРИМЕНЯЕМ SIGMOID для нормализации в 0-1
+            scores = expit(scores)
 
         except Exception as e:
             logger.error(f"❌ Ошибка rerank: {e}")
             return sorted(chunks, key=lambda x: x.get('score', 0), reverse=True)
 
+        # Добавляем rerank_score к чанкам
         for chunk, score in zip(chunks, scores):
-            chunk['rerank_score'] = float(score)  # ← Теперь 0.0 - 1.0
+            chunk['rerank_score'] = float(score)
 
-        # ✅ УЖЕСТЧАЕМ порог (было 0.3-0.45)
+        # Фильтруем по порогу и сортируем
         filtered = [c for c in chunks if c.get('rerank_score', 0) >= Config.RERANK_MIN_SCORE]
         sorted_chunks = sorted(filtered, key=lambda x: x.get('rerank_score', 0), reverse=True)
 
+        # Возвращаем топ-K
         return sorted_chunks[:Config.RERANK_TOP_K]
 
     def fit_bm25(self, documents: list[str]):
@@ -148,6 +151,7 @@ class Embed:
 
         if len(dense_embeddings.shape) == 1:
             dense_embeddings = dense_embeddings.reshape(1, -1)
+
         return dense_embeddings.tolist()
 
     def embed_sparse_batch(self, texts: list[str]) -> list[dict]:
