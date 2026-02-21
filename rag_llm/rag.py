@@ -1,5 +1,4 @@
 # rag_llm/rag.py
-
 from hybrid_search.database import Database
 from hybrid_search.utils import singleton, logger, Config, truncate_text
 from typing import List, Dict
@@ -12,12 +11,7 @@ class RAG:
         logger.info("✅ RAG инициализирован")
 
     def get_documents(self, results: Dict) -> List[Dict]:
-        """
-        Извлекает документы с метаданными из результатов поиска.
-
-        Returns:
-            Список dict с полями: text, title, section, url, document_id
-        """
+        """Извлекает документы с метаданными из результатов поиска"""
         documents = []
         matches = results.get('matches', [])
 
@@ -29,7 +23,7 @@ class RAG:
                 'section': metadata.get('section', ''),
                 'url': metadata.get('url', ''),
                 'document_id': metadata.get('document_id', ''),
-                'score': match.get('score', 0)
+                'score': match.get('rerank_score', match.get('score', 0))
             }
             if doc['text'].strip():
                 documents.append(doc)
@@ -38,37 +32,39 @@ class RAG:
         return documents
 
     def create_prompt(self, query: str, documents: List[Dict]) -> str:
-        """
-        Формирует структурированный промпт с метаданными.
-
-        Поддерживает:
-        - Заголовки и разделы документов
-        - Markdown-форматирование контекста
-        - Инструкции для LLM по форматированию ответа
-        """
+        """Формирует структурированный промпт с метаданными"""
         if not documents:
-            return f"Вопрос: {query}\n\nОтвет: (контекст не найден)"
+            return f"Вопрос: {query}\nОтвет: (контекст не найден)"
 
-        # Формируем контекст с метаданными
+        # ГРУППИРОВКА по документам в промпте
+        doc_groups = {}
+        for doc in documents:
+            page_id = doc.get('document_id', 'unknown')
+            if page_id not in doc_groups:
+                doc_groups[page_id] = {
+                    'title': doc['title'],
+                    'url': doc['url'],
+                    'chunks': []
+                }
+            doc_groups[page_id]['chunks'].append(doc['text'])
+
+        # Формируем контекст
         context_parts = []
         total_tokens = 0
 
-        for i, doc in enumerate(documents):
-            # Собираем заголовок блока
-            header = f"[ИСТОЧНИК {i + 1}]"
-            if doc.get('title'):
-                header += f" — {doc['title']}"
-            if doc.get('section') and Config.INCLUDE_SECTION_IN_PROMPT:
-                header += f" § {doc['section']}"
-
-            # Формируем блок
+        for i, (page_id, doc_info) in enumerate(doc_groups.items(), 1):
+            header = f"[ИСТОЧНИК {i}] — {doc_info['title']}"
             block = f"{header}\n"
-            block += f"🔗 {doc.get('url', '')}\n" if doc.get('url') else ""
-            block += f"---\n{doc['text']}\n"
-            block += f"{'=' * 60}\n\n"
+            block += f"🔗 {doc_info['url']}\n"
+            block += f"---\n"
+
+            # ✅ Объединяем чанки одного документа
+            combined_text = "\n\n...\n\n".join(doc_info['chunks'])
+            block += f"{combined_text}\n"
+            block += f"{'=' * 60}\n"
 
             # Проверяем лимит токенов
-            block_tokens = len(block) // 4  # эвристика
+            block_tokens = len(block) // 4
             if total_tokens + block_tokens > Config.MAX_CONTEXT_TOKENS:
                 logger.debug(f"⚠️  Достигнут лимит контекста ({Config.MAX_CONTEXT_TOKENS} токенов)")
                 break
@@ -78,7 +74,6 @@ class RAG:
 
         context = "".join(context_parts)
 
-        # Формируем финальный промпт
         prompt = f"""Ты — помощник по внутренней документации компании Confluence.
 
 === КОНТЕКСТ ИЗ ДОКУМЕНТАЦИИ ===

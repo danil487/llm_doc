@@ -48,10 +48,11 @@ class Response:
         messages = [system_message] + messages
         messages.append({'role': 'user', 'content': prompt})
 
+        logger.info(f"Запрос в модель: {prompt}")
         response = self.model.get_response(messages)
         answer = response.get('message', {}).get('content', '❌ Ошибка генерации ответа')
 
-        # Пост-обработка: добавляем ссылки и форматируем
+        # Пост-обработка
         answer_formatted = self._format_response(answer, matches)
 
         self.session_manager.store_conversation(session_id, 'assistant', answer_formatted)

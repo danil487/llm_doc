@@ -1,14 +1,13 @@
 # telegram_bot/bot.py
+import os
 import asyncio
-
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-
 from hybrid_search.utils import logger, Config
 
 
 class TelegramBot:
-    """✅ Telegram Bot """
+    """✅ Telegram Bot (без обработки сигналов для потока)"""
 
     def __init__(self):
         self.token = Config.TELEGRAM_BOT_TOKEN
@@ -140,39 +139,3 @@ class TelegramBot:
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Логирование ошибок"""
         logger.error(f"❌ Telegram error: {context.error}")
-
-    def run_polling(self):
-        """Запуск бота в режиме polling (рекомендуется)"""
-        self.app = Application.builder().token(self.token).build()
-        self.app.add_handler(CommandHandler("start", self.start))
-        self.app.add_handler(CommandHandler("help", self.help_command))
-        self.app.add_handler(CommandHandler("status", self.status_command))
-        self.app.add_handler(CommandHandler("clear", self.clear_command))
-        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        self.app.add_error_handler(self.error_handler)
-        logger.info("🚀 Telegram Bot запущен (polling mode)")
-        self.app.run_polling(drop_pending_updates=True)
-
-    def run_webhook(self):
-        """Запуск бота в режиме webhook (требует HTTPS)"""
-        self.app = Application.builder().token(self.token).build()
-        self.app.add_handler(CommandHandler("start", self.start))
-        self.app.add_handler(CommandHandler("help", self.help_command))
-        self.app.add_handler(CommandHandler("status", self.status_command))
-        self.app.add_handler(CommandHandler("clear", self.clear_command))
-        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        self.app.add_error_handler(self.error_handler)
-        logger.info(f"🚀 Telegram Bot запущен (webhook mode: {self.webhook_url})")
-        self.app.run_webhook(
-            listen="0.0.0.0",
-            port=self.webhook_port,
-            url_path=self.token,
-            webhook_url=self.webhook_url
-        )
-
-    def run(self):
-        """Автовыбор режима запуска"""
-        if self.webhook_url:
-            self.run_webhook()
-        else:
-            self.run_polling()
