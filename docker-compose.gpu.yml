@@ -1,5 +1,4 @@
 # docker-compose.gpu.yml
-version: '3.8'
 # ЗАПУСК: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 services:
