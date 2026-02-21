@@ -49,15 +49,20 @@ class Config:
 
     # ===== RAG Pipeline =====
     FORCE_CPU: bool = os.getenv("FORCE_CPU", "false").lower() == "true"
-    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "20"))
-    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", "15"))
-    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", "0.3"))
+    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "12"))
+    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", "10"))
+    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", "0.45"))
     RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "2048"))
+    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "3500"))
     INCLUDE_SECTION_IN_PROMPT: bool = os.getenv("INCLUDE_SECTION_IN_PROMPT", "true").lower() == "true"
     RESPONSE_FORMAT: str = os.getenv("RESPONSE_FORMAT", "markdown")
     ALWAYS_SHOW_SOURCES: bool = os.getenv("ALWAYS_SHOW_SOURCES", "true").lower() == "true"
     MAX_SOURCE_LINKS: int = int(os.getenv("MAX_SOURCE_LINKS", "3"))
+
+    # ===== Чанкинг =====
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "850"))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "85"))
+    CHUNK_SEPARATORS: str = os.getenv("CHUNK_SEPARATORS", "\n\n,\n,. , ,")
 
     # ===== Расширение контекста =====
     SEARCH_NEIGHBOR_WINDOW: int = int(os.getenv("SEARCH_NEIGHBOR_WINDOW", "1"))
@@ -84,11 +89,19 @@ class Config:
         logger.info(f"   • Redis: {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
         logger.info(f"   • Retrieval: top_k={cls.RETRIEVAL_TOP_K}")
         logger.info(f"   • Rerank: top_k={cls.RERANK_TOP_K}, min_score={cls.RERANK_MIN_SCORE}")
+        logger.info(f"   • Chunking: size={cls.CHUNK_SIZE}, overlap={cls.CHUNK_OVERLAP}")
         logger.info(f"   • Neighbor: window={cls.SEARCH_NEIGHBOR_WINDOW}, mult={cls.SEARCH_NEIGHBOR_SCORE_MULTIPLIER}")
         logger.info(f"   • Prompt: max_tokens={cls.MAX_CONTEXT_TOKENS}, section={cls.INCLUDE_SECTION_IN_PROMPT}")
         logger.info(f"   • Response: format={cls.RESPONSE_FORMAT}, sources={cls.ALWAYS_SHOW_SOURCES}")
         logger.info(f"   • Telegram: enabled={cls.TELEGRAM_ENABLED}")
         logger.info(f"   • Device: force_cpu={cls.FORCE_CPU}")
+
+        # ✅ Проверка на переполнение контекста
+        estimated_chunks = cls.RETRIEVAL_TOP_K * (cls.SEARCH_NEIGHBOR_WINDOW * 2 + 1)
+        estimated_tokens = estimated_chunks * (cls.CHUNK_SIZE // 4)
+        logger.info(f"   • ⚠️  Оценка контекста: ~{estimated_tokens} токенов (лимит: {cls.MAX_CONTEXT_TOKENS})")
+        if estimated_tokens > cls.MAX_CONTEXT_TOKENS * 1.5:
+            logger.warning(f"⚠️  Риск переполнения контекста! Рекомендуется уменьшить RETRIEVAL_TOP_K или CHUNK_SIZE")
 
 
 def load_env_variable(var_name, default=None):
