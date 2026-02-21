@@ -39,7 +39,7 @@ log_error() {
 }
 
 check_env_file() {
-    """Проверка существования и валидности .env файла"""
+    # Проверка существования и валидности .env файла
     if [ ! -f "$ENV_FILE" ]; then
         log_error "Файл .env не найден: $ENV_FILE"
         log_info "Создайте файл .env на основе .env.example"
@@ -63,7 +63,7 @@ check_env_file() {
 }
 
 check_docker() {
-    """Проверка доступности Docker"""
+    # Проверка доступности Docker
     if ! command -v docker &> /dev/null; then
         log_error "Docker не установлен"
         exit 1
@@ -78,8 +78,7 @@ check_docker() {
 }
 
 check_gpu_support() {
-    """Проверка поддержки GPU в Docker"""
-    # ✅ Проверяем не на хосте, а возможность Docker использовать GPU
+    # Проверка поддержки GPU в Docker
     if docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi &> /dev/null; then
         log_success "GPU поддержка Docker подтверждена"
         return 0
@@ -90,7 +89,7 @@ check_gpu_support() {
 }
 
 check_docker_compose() {
-    """Определение команды Docker Compose"""
+    # Определение команды Docker Compose
     if docker compose version &> /dev/null; then
         echo "docker compose"
     elif docker-compose version &> /dev/null; then
@@ -102,7 +101,7 @@ check_docker_compose() {
 }
 
 wait_for_service() {
-    """Ожидание готовности сервиса по health check"""
+    # Ожидание готовности сервиса по health check
     local service_name=$1
     local max_attempts=$((MAX_WAIT_TIME / WAIT_INTERVAL))
     local attempt=0
@@ -132,7 +131,7 @@ wait_for_service() {
 }
 
 cleanup_on_error() {
-    """Очистка при ошибке запуска"""
+    # Очистка при ошибке запуска
     log_warning "Ошибка запуска, выполняем очистку..."
     docker compose down --remove-orphans 2>/dev/null || true
 }
@@ -161,7 +160,7 @@ log_info "Используем: $COMPOSE_CMD"
 REBUILD="${1:-}"
 USE_GPU=false
 
-# обработка флагов
+# Обработка флагов
 for arg in "$@"; do
     case $arg in
         --rebuild|-r)

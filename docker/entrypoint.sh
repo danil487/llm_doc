@@ -9,8 +9,8 @@ if [ -z "$CONFLUENCE_API_KEY" ]; then
     exit 1
 fi
 
-if [ -z "$TELEGRAM_BOT_TOKEN" ] && [ "$TELEGRAM_ENABLED" = "true" ]; then
-    echo "❌ Ошибка: TELEGRAM_BOT_TOKEN не установлен"
+if [ "$TELEGRAM_ENABLED" = "true" ] && [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "❌ Ошибка: TELEGRAM_ENABLED=true но TELEGRAM_BOT_TOKEN не установлен"
     exit 1
 fi
 
