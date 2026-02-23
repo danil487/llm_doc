@@ -7,7 +7,7 @@ from hybrid_search.utils import logger
 
 
 class SyncController:
-    """✅ Контроллер фоновой синхронизации"""
+    """Контроллер фоновой синхронизации"""
 
     def __init__(self):
         self._updater = None

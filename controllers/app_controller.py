@@ -9,7 +9,7 @@ from rag_llm.response import Response
 
 
 class AppController:
-    """✅ Контроллер основного приложения"""
+    """Контроллер основного приложения"""
 
     def __init__(self):
         self.session_id = f"session_{uuid.uuid4().hex[:8]}"
@@ -23,13 +23,13 @@ class AppController:
         logger.info(f"🆔 Session ID: {self.session_id}")
 
     def _get_semantic(self):
-        """✅ Ленивая инициализация SemanticSearch"""
+        """Ленивая инициализация SemanticSearch"""
         if self._semantic is None:
             self._semantic = SemanticSearch()
         return self._semantic
 
     def _get_response(self):
-        """✅ Ленивая инициализация Response"""
+        """Ленивая инициализация Response"""
         if self._response is None:
             self._response = Response()
         return self._response

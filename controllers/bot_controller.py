@@ -5,7 +5,7 @@ import asyncio
 
 
 class BotController:
-    """✅ Контроллер Telegram бота (с правильной инициализацией)"""
+    """Контроллер Telegram бота"""
 
     def __init__(self):
         self._running = False
@@ -22,17 +22,17 @@ class BotController:
     def _run_bot(self):
         """Точка входа бота (внутри потока)"""
         try:
-            # ✅ Создаём новый event loop для потока
+            # Создаём новый event loop для потока
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
 
-            # ✅ Импорты внутри потока
+            # Импорты внутри потока
             from telegram.ext import Application, CommandHandler, MessageHandler, filters
             from telegram_bot.bot import TelegramBot
 
             bot = TelegramBot()
 
-            # ✅ Создаём приложение
+            # Создаём приложение
             app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
 
             # Регистрируем обработчики
@@ -43,7 +43,7 @@ class BotController:
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message))
             app.add_error_handler(bot.error_handler)
 
-            # ✅ Запускаем polling в event loop
+            # Запускаем polling в event loop
             logger.info("🚀 Telegram Bot запущен (polling mode)")
             self._loop.run_until_complete(self._start_app(app))
 
@@ -56,18 +56,18 @@ class BotController:
                 self._loop.close()
 
     async def _start_app(self, app):
-        """✅ Правильная инициализация и запуск приложения"""
+        """Инициализация и запуск приложения"""
         try:
-            # ✅ Инициализируем приложение
+            # Инициализируем приложение
             await app.initialize()
 
-            # ✅ Запускаем updater
+            # Запускаем updater
             await app.updater.start_polling(drop_pending_updates=True)
 
-            # ✅ Запускаем приложение
+            # Запускаем приложение
             await app.start()
 
-            # ✅ Держим поток живым
+            # Держим поток живым
             while self._running:
                 await asyncio.sleep(1)
 
@@ -75,7 +75,7 @@ class BotController:
             logger.error(f"❌ Ошибка в _start_app: {e}")
             raise
         finally:
-            # ✅ Корректная остановка
+            # Корректная остановка
             await app.stop()
             await app.updater.stop()
             await app.shutdown()
