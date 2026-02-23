@@ -13,7 +13,6 @@ sentence-transformers>=2.2.0
 ollama>=0.1.0
 transformers>=4.35.0
 tokenizers>=0.15.0
-torch>=2.0.0
 
 # ============================================
 # 🔍 SEARCH & RANKING
@@ -27,8 +26,6 @@ langchain-huggingface>=0.0.1
 # 📱 TELEGRAM BOT
 # ============================================
 python-telegram-bot>=20.0
-# ИЛИ для async версии:
-# aiogram>=3.0.0
 
 # ============================================
 # 🧪 TESTING & DEV

@@ -62,14 +62,14 @@ class SemanticSearch:
             return {'matches': [], 'query': query, 'error': str(e)}
 
     def _group_by_document(self, chunks: List[Dict]) -> Dict[str, List[Dict]]:
-        """✅ Группирует чанки по document_id (page_id)"""
+        """Группирует чанки по document_id (page_id)"""
         grouped = defaultdict(list)
         for chunk in chunks:
             # Извлекаем page_id из chunk_id (формат: "page_id-chunk_num")
             page_id = chunk['id'].rsplit('-', 1)[0]
             grouped[page_id].append(chunk)
 
-        # ✅ Сортировка: документы с бóльшим количеством чанков — выше
+        # Сортировка: документы с бóльшим количеством чанков — выше
         sorted_docs = sorted(
             grouped.items(),
             key=lambda x: (
@@ -93,14 +93,14 @@ class SemanticSearch:
             dense_vector: list,
             sparse_vector: dict
     ) -> List[Dict]:
-        """✅ расширение контекста с приоритетом релевантных документов и ограничением чанков на документ"""
+        """расширение контекста с приоритетом релевантных документов и ограничением чанков на документ"""
         expanded = []
         seen_ids = set()
 
-        # ✅ Ограничение на количество чанков от одного документа
+        # Ограничение на количество чанков от одного документа
         max_chunks_per_doc = Config.MAX_CHUNKS_PER_DOC
 
-        # ✅ Сначала добавляем ограниченное число лучших чанков из топ-документов
+        # Сначала добавляем ограниченное число лучших чанков из топ-документов
         for page_id, doc_chunks in list(grouped.items())[:5]:  # Топ-5 документов
             # Сортируем чанки документа по убыванию релевантности
             sorted_chunks = sorted(
@@ -118,7 +118,7 @@ class SemanticSearch:
                     expanded.append(chunk)
                     seen_ids.add(chunk['id'])
 
-            # ✅ Определяем окно расширения на основе максимального score в документе
+            # Определяем окно расширения на основе максимального score в документе
             max_score = max(c.get('rerank_score', c.get('score', 0)) for c in doc_chunks)
             if max_score >= 0.7:
                 window = 3

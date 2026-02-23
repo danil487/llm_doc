@@ -1,7 +1,6 @@
 # docker/Dockerfile
-FROM python:3.11-slim-bookworm
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
 
-# Установка системных зависимостей
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -15,24 +14,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# ✅ КОПИРУЕМ ТОЛЬКО requirements.txt СНАЧАЛА (для кэша)
 COPY requirements.txt .
 
-# ✅ УСТАНАВЛИВАЕМ ЗАВИСИМОСТИ (кешируется отдельно)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# ✅ КОПИРУЕМ ИСХОДНЫЙ КОД (после зависимостей)
 COPY hybrid_search/ ./hybrid_search/
 COPY rag_llm/ ./rag_llm/
 COPY telegram_bot/ ./telegram_bot/
 COPY controllers/ ./controllers/
 COPY main.py .
 
-# ✅ Создаём директории для данных (НЕ копируем данные!)
 RUN mkdir -p /app/data/chroma_db /app/.cache /app/logs
 
-# ✅ Копируем только entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
@@ -41,5 +35,7 @@ EXPOSE 8000 8443
 ENV PYTHONPATH=/app
 ENV TOKENIZERS_PARALLELISM=true
 ENV FORCE_CPU=false
+ENV CUDA_VISIBLE_DEVICES=0
+ENV NVIDIA_VISIBLE_DEVICES=all
 
 ENTRYPOINT ["/entrypoint.sh"]

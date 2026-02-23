@@ -4,14 +4,12 @@ from rank_bm25 import BM25Okapi
 from hybrid_search.utils import singleton, logger, Config
 import re
 import os
-import numpy as np
 from scipy.special import expit
 
 
 @singleton
 class Embed:
     def __init__(self):
-        # ✅ ОПРЕДЕЛЯЕМ устройство автоматически
         self.device = self._get_device()
         logger.info(f"🔧 Используемое устройство: {self.device}")
 
@@ -98,7 +96,7 @@ class Embed:
         # Предсказываем scores
         try:
             scores = self.reranker.predict(pairs)
-
+            logger.info(f"Raw scores: {scores}")
             # ПРИМЕНЯЕМ SIGMOID для нормализации в 0-1
             scores = expit(scores)
 

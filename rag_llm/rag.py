@@ -1,7 +1,8 @@
 # rag_llm/rag.py
-from hybrid_search.database import Database
-from hybrid_search.utils import singleton, logger, Config, truncate_text
 from typing import List, Dict
+
+from hybrid_search.database import Database
+from hybrid_search.utils import singleton, logger, Config
 
 
 @singleton

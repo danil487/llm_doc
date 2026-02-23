@@ -1,6 +1,6 @@
 # hybrid_search/chunk.py
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from hybrid_search.embed import Embed  # ← Используем общий Embed
+from hybrid_search.embed import Embed
 from hybrid_search.utils import singleton, logger, Config
 
 

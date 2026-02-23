@@ -1,12 +1,11 @@
 # hybrid_search/update.py
 
 import time
-import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 
 from hybrid_search import database, confluence, embed, chunk
-from hybrid_search.utils import html_to_text, get_redis_client, logger, parse_datetime, format_datetime, Config
+from hybrid_search.utils import html_to_text, get_redis_client, logger, parse_datetime, format_datetime
 
 
 class UpdateDatabase:
@@ -78,7 +77,6 @@ class UpdateDatabase:
         page_data_cache = {}
 
         for idx, (page_id, page_info) in enumerate(pages.items(), 1):
-            # ✅ ЗАЩИТА: проверяем тип page_info
             if not isinstance(page_info, dict):
                 logger.error(f"⚠️  Пропущена страница {page_id}: page_info имеет тип {type(page_info)}")
                 continue
@@ -86,7 +84,6 @@ class UpdateDatabase:
             try:
                 full_data = self.confluence_api.get_page_full(page_id)
 
-                # ✅ Проверка что full_data — dict
                 if not isinstance(full_data, dict):
                     logger.error(f"⚠️  Пропущена страница {page_id}: get_page_full вернул {type(full_data)}")
                     continue
@@ -114,7 +111,6 @@ class UpdateDatabase:
         # Индексация
         logger.info("📥 Начало индексации...")
         for idx, (page_id, page_info) in enumerate(pages.items(), 1):
-            # ✅ again проверка типа
             if not isinstance(page_info, dict):
                 logger.warning(f"⚠️  Пропущена страница {page_id}: page_info не dict")
                 continue
@@ -160,7 +156,7 @@ class UpdateDatabase:
                     'total_chunks': total_chunks
                 }
 
-                # ✅ Удаляем пустые списки
+                # Удаляем пустые списки
                 chunk_metadata = {
                     k: v for k, v in chunk_metadata.items()
                     if not (isinstance(v, list) and len(v) == 0)

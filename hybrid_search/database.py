@@ -62,7 +62,7 @@ class Database:
         return clean_metadata
 
     def _deserialize_metadata(self, raw_metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """✅ Десериализует JSON-строки обратно в списки"""
+        """Десериализует JSON-строки обратно в списки"""
         if not raw_metadata:
             return {}
 
@@ -153,7 +153,7 @@ class Database:
             return []
 
     def get_neighbors(self, chunk_id: str, window: int = 1) -> List[Dict]:
-        """✅ ПОЛУЧЕНИЕ СОСЕДНИХ ЧАНКОВ (решает проблему фрагментации)"""
+        """ПОЛУЧЕНИЕ СОСЕДНИХ ЧАНКОВ (решает проблему фрагментации)"""
         neighbors = []
         parts = chunk_id.rsplit('-', 1)
         if len(parts) != 2:

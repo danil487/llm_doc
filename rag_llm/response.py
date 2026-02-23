@@ -1,9 +1,10 @@
 # rag_llm/response.py
 
-from rag_llm import model, rag, context
-from hybrid_search.utils import singleton, logger, Config, format_markdown_response
 import re
-from typing import List, Dict
+from typing import Dict
+
+from hybrid_search.utils import singleton, logger, Config, format_markdown_response
+from rag_llm import model, rag, context
 
 
 @singleton

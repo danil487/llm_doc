@@ -78,14 +78,37 @@ check_docker() {
 }
 
 check_gpu_support() {
-    # Проверка поддержки GPU в Docker
-    if docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi &> /dev/null; then
-        log_success "GPU поддержка Docker подтверждена"
-        return 0
-    else
-        log_warning "GPU поддержка Docker не доступна (требуется nvidia-container-toolkit)"
-        return 1
+    log_info "🔍 Проверка GPU поддержки..."
+
+    # ✅ ТЕСТ 1: Проверка nvidia-smi внутри WSL (быстрая)
+    if command -v nvidia-smi &> /dev/null; then
+        if nvidia-smi --query-gpu=name --format=csv,noheader &> /dev/null; then
+            log_success "✅ GPU обнаружен в системе (WSL2)"
+            GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+            log_info "   Видеокарта: $GPU_NAME"
+
+            # ✅ ТЕСТ 2: Проверка Docker с правильным образом
+            if docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 \
+                nvidia-smi --query-gpu=name --format=csv,noheader &> /dev/null; then
+                log_success "✅ Docker видит GPU"
+                return 0
+            else
+                log_warning "⚠️  Docker не видит GPU (но WSL видит)"
+                log_info "💡 Попробуйте: wsl --shutdown && перезапустите Docker Desktop"
+                return 1
+            fi
+        fi
     fi
+
+    # ✅ ТЕСТ 3: Альтернативная проверка через torch
+    if docker run --rm --gpus all pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime \
+        python -c "import torch; print('CUDA:', torch.cuda.is_available())" &> /dev/null; then
+        log_success "✅ PyTorch CUDA проверка успешна"
+        return 0
+    fi
+
+    log_warning "⚠️  GPU поддержка Docker не доступна"
+    return 1
 }
 
 check_docker_compose() {

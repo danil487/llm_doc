@@ -1,6 +1,6 @@
 # hybrid_search/confluence.py
 
-from hybrid_search.utils import load_env_variable, make_request, initialize_auth, singleton, logger, \
+from hybrid_search.utils import make_request, initialize_auth, singleton, logger, \
     extract_metadata_from_confluence, Config
 
 
@@ -34,7 +34,7 @@ class ConfluenceAPI:
 
     def get_page_ids(self, space_id: str) -> dict:
         """Получение списка страниц с базовыми метаданными"""
-        page_info = {}  # {page_id: {'title': ..., 'version': ..., 'url': ...}}
+        page_info = {}
         start = 0
         limit = 100
 
@@ -52,7 +52,6 @@ class ConfluenceAPI:
             results = data.get('results', [])
 
             for page in results:
-                # ✅ ЗАЩИТА: проверяем, что page — это dict
                 if not isinstance(page, dict):
                     logger.warning(f"⚠️  Пропущен некорректный элемент page: {type(page)} = {page}")
                     continue
@@ -62,10 +61,7 @@ class ConfluenceAPI:
                     logger.warning(f"⚠️  Пропущена страница без ID: {page}")
                     continue
 
-                # ✅ Преобразуем ID в строку для консистентности
                 page_id = str(page_id)
-
-                # ✅ Безопасное извлечение вложенных полей
                 version_info = page.get('version', {})
                 if not isinstance(version_info, dict):
                     version_info = {}

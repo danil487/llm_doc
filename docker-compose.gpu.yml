@@ -1,28 +1,31 @@
 # docker-compose.gpu.yml
-# ЗАПУСК: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# Для WSL2 + Docker Desktop
 
 services:
   ollama:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_DEBUG=1
+      - OLLAMA_NUM_PARALLEL=1
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - OLLAMA_DEBUG=true
 
   app:
+    environment:
+      - FORCE_CPU=false
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
-    environment:
-      - CHROMA_GPU_ENABLED=true
-      - NVIDIA_VISIBLE_DEVICES=all
-      - FORCE_CPU=false

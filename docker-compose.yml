@@ -1,8 +1,8 @@
 # docker-compose.yml
-version: '3.8'
-
 services:
   app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -44,12 +44,13 @@ services:
       - ALWAYS_SHOW_SOURCES=${ALWAYS_SHOW_SOURCES:-true}
       - MAX_SOURCE_LINKS=${MAX_SOURCE_LINKS:-3}
 
-      # ===== Чанкинг (НОВОЕ) =====
+      # ===== Чанкинг =====
       - CHUNK_SIZE=${CHUNK_SIZE:-850}
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-85}
       - CHUNK_SEPARATORS=${CHUNK_SEPARATORS:-\n\n,\n,. , ,}
 
       # ===== Расширение контекста =====
+      - MAX_CHUNKS_PER_DOC=${MAX_CHUNKS_PER_DOC:-1}
       - SEARCH_NEIGHBOR_WINDOW=${SEARCH_NEIGHBOR_WINDOW:-1}
       - SEARCH_NEIGHBOR_SCORE_MULTIPLIER=${SEARCH_NEIGHBOR_SCORE_MULTIPLIER:-0.8}
 
@@ -82,12 +83,8 @@ services:
     stdin_open: true
     tty: true
 
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-        reservations:
-          memory: 4G
+    mem_limit: 8G
+    cpus: 2
 
   ollama:
     image: ollama/ollama:latest
@@ -103,12 +100,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 180s
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-        reservations:
-          memory: 8G
+    mem_limit: 16G
+    cpus: 4
 
   redis:
     image: redis:7-alpine

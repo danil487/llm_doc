@@ -98,7 +98,7 @@ class Config:
         logger.info(f"   • Device: force_cpu={cls.FORCE_CPU}")
         logger.info(f"   • Max chunks per doc: {cls.MAX_CHUNKS_PER_DOC}")
 
-        # ✅ Проверка на переполнение контекста
+        # Проверка на переполнение контекста
         estimated_chunks = cls.RETRIEVAL_TOP_K * (cls.SEARCH_NEIGHBOR_WINDOW * 2 + 1)
         estimated_tokens = estimated_chunks * (cls.CHUNK_SIZE // 4)
         logger.info(f"   • ⚠️  Оценка контекста: ~{estimated_tokens} токенов (лимит: {cls.MAX_CONTEXT_TOKENS})")
