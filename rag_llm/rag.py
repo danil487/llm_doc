@@ -19,12 +19,12 @@ class RAG:
         for match in matches:
             metadata = match.get('metadata', {})
             doc = {
-                'text': metadata.get('content', match.get('text', '')),
+                'text': match.get('text', ''),
                 'title': metadata.get('title', 'Без названия'),
                 'section': metadata.get('section', ''),
                 'url': metadata.get('url', ''),
                 'document_id': metadata.get('document_id', ''),
-                'score': match.get('rerank_score', match.get('score', 0))
+                'score': match.get('score', 0)
             }
             if doc['text'].strip():
                 documents.append(doc)
@@ -33,38 +33,31 @@ class RAG:
         return documents
 
     def create_prompt(self, query: str, documents: List[Dict]) -> str:
-        """Формирует структурированный промпт с метаданными"""
+        """Формирует структурированный промпт с parent-блоками"""
         if not documents:
             return f"Вопрос: {query}\nОтвет: (контекст не найден)"
 
-        # ГРУППИРОВКА по документам в промпте
-        doc_groups = {}
-        for doc in documents:
-            page_id = doc.get('document_id', 'unknown')
-            if page_id not in doc_groups:
-                doc_groups[page_id] = {
-                    'title': doc['title'],
-                    'url': doc['url'],
-                    'chunks': []
-                }
-            doc_groups[page_id]['chunks'].append(doc['text'])
-
-        # Формируем контекст
         context_parts = []
         total_tokens = 0
 
-        for i, (page_id, doc_info) in enumerate(doc_groups.items(), 1):
-            header = f"[ИСТОЧНИК {i}] — {doc_info['title']}"
+        for i, doc in enumerate(documents[:Config.MAX_PARENT_BLOCKS], 1):
+            metadata = doc.get('metadata', {})
+
+            header = f"[ИСТОЧНИК {i}] — {doc['title']}"
             block = f"{header}\n"
-            block += f"🔗 {doc_info['url']}\n"
-            block += f"---\n"
 
-            # ✅ Объединяем чанки одного документа
-            combined_text = "\n\n...\n\n".join(doc_info['chunks'])
-            block += f"{combined_text}\n"
+            url = doc.get('url', '')
+            section = doc.get('section', '')
+            if url:
+                block += f"🔗 {url}"
+                if section and Config.INCLUDE_SECTION_IN_PROMPT:
+                    block += f" → {section}"
+                block += "\n"
+
             block += f"{'=' * 60}\n"
+            block += f"{doc['text']}\n"
+            block += f"{'=' * 60}\n\n"
 
-            # Проверяем лимит токенов
             block_tokens = len(block) // 4
             if total_tokens + block_tokens > Config.MAX_CONTEXT_TOKENS:
                 logger.debug(f"⚠️  Достигнут лимит контекста ({Config.MAX_CONTEXT_TOKENS} токенов)")
@@ -73,32 +66,27 @@ class RAG:
             context_parts.append(block)
             total_tokens += block_tokens
 
-        context = "".join(context_parts)
+        context = "\n".join(context_parts)
 
-        prompt = f"""Ты — помощник по внутренней документации компании Confluence.
+        prompt = f"""Ты — эксперт по технической документации Confluence.
 
-=== КОНТЕКСТ ИЗ ДОКУМЕНТАЦИИ ===
+=== КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ ===
 {context}
 
 === ВОПРОС ПОЛЬЗОВАТЕЛЯ ===
 {query}
 
-=== ИНСТРУКЦИИ ДЛЯ ОТВЕТА ===
-1. Отвечай СТРОГО на основе предоставленного контекста
-2. Если информации недостаточно — честно скажи об этом
-3. При ссылке на документ указывай его ID в формате [document_id], например [238485654]
-4. Форматируй ответ в Markdown:
-   • Используй **жирный** для ключевых терминов
-   • Используй `код` для технических значений
-   • Используй списки для шагов
-   • Используй таблицы если уместно
-5. После основного ответа добавь блок "📎 Источники" со ссылками
+=== ИНСТРУКЦИИ ===
+1. Отвечай СТРОГО на основе контекста выше
+2. Если информации недостаточно — честно скажи "В документации нет ответа на этот вопрос"
+3. Цитируй конкретные разделы, используя [ИСТОЧНИК N]
+4. Для таблиц — интерпретируй данные, а не копируй сырой текст
+5. Форматируй ответ в Markdown: списки, **жирный** для терминов, `код` для значений
 
 === ФОРМАТ ОТВЕТА ===
-[Твой ответ здесь]
+[Твой ответ]
 
 📎 Источники:
-• [Заголовок страницы](URL) — раздел
+• [Заголовок](URL) — раздел
 """
-
         return prompt

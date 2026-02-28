@@ -1,9 +1,10 @@
 # hybrid_search/search.py
+from collections import defaultdict
+from typing import Dict, List, Optional
+
 from hybrid_search.database import Database
 from hybrid_search.embed import Embed
 from hybrid_search.utils import singleton, logger, Config
-from typing import Dict, List
-from collections import defaultdict
 
 
 @singleton
@@ -11,140 +12,141 @@ class SemanticSearch:
     def __init__(self):
         self.db = Database()
         self.embedder = Embed()
-        logger.info("✅ SemanticSearch инициализирован")
+        logger.info("✅ SemanticSearch инициализирован (Parent-Child)")
 
     def search(self, query: str, n_results: int = None) -> Dict:
-        """✅ УЛУЧШЕННЫЙ поиск с группировкой по документам"""
+        """Parent-Child поиск"""
         try:
             n_results = n_results or Config.RETRIEVAL_TOP_K
 
-            # 1. Dense + Sparse поиск (берём больше кандидатов)
+            # 1. Поиск child-чанков
             dense_vector = self.embedder.embed_text(query)
             sparse_vector = self.embedder.embed_sparse(query)
 
-            candidates = self.db.search(
-                dense_vector,
-                sparse_vector,
-                n_results=n_results * 2  # Больше кандидатов для фильтрации
+            child_candidates = self.db.search_children(
+                dense_vector, sparse_vector,
+                n_results=n_results * 3
             )
 
-            if not candidates:
-                return {'matches': [], 'query': query}
+            if not child_candidates:
+                return {'matches': [], 'query': query, 'type': 'child_search'}
 
-            # 2. RERANK ПЕРЕД расширением (фильтруем шум раньше)
-            reranked = self.embedder.rerank(query, candidates)
+            # 2. Reranking child-чанков
+            reranked_children = self.embedder.rerank(query, child_candidates)
 
-            # 3. РУППИРОВКА по документам (page_id)
-            grouped = self._group_by_document(reranked)
+            # 3. Фильтрация по порогу
+            filtered_children = [
+                c for c in reranked_children
+                if c.get('rerank_score', c.get('score', 0)) >= Config.CHILD_MIN_SCORE
+            ]
 
-            # 4. ДИНАМИЧЕСКОЕ расширение контекста
-            expanded = self._expand_with_smart_neighbors(
-                grouped,
-                query,
-                dense_vector,
-                sparse_vector
-            )
+            if not filtered_children:
+                return {'matches': [], 'query': query, 'type': 'child_search_filtered'}
 
-            # 5. ФИНАЛЬНЫЙ отбор топ-K
-            final_matches = expanded[:Config.RERANK_TOP_K]
+            # 4. Группировка child → parent
+            parent_groups = self._group_children_to_parents(filtered_children)
+
+            # 5. Формирование финальных матчей с parent-текстами
+            final_matches = []
+            for parent_id, parent_data in parent_groups.items():
+                # Проверяем что parent_text не пустой
+                if not parent_data.get('text'):
+                    logger.warning(f"⚠️  Parent {parent_id} без текста, пропускаем")
+                    continue
+
+                child_scores = parent_data['child_scores']
+
+                final_matches.append({
+                    'id': parent_id,
+                    'text': parent_data['text'],
+                    'metadata': parent_data['metadata'],
+                    'score': max(child_scores) if child_scores else 0,
+                    'child_count': len(child_scores),
+                    'child_scores': child_scores,
+                    'type': 'parent'
+                })
+
+            # 6. Сортировка по score
+            final_matches = sorted(
+                final_matches,
+                key=lambda x: x.get('score', 0),
+                reverse=True
+            )[:Config.RERANK_TOP_K]
 
             logger.info(
-                f"📊 Поиск: {len(candidates)} кандидатов → "
-                f"{len(reranked)} после rerank → "
-                f"{len(grouped)} документов → "
-                f"{len(final_matches)} финальных чанков"
+                f"📊 Parent-Child поиск: "
+                f"{len(child_candidates)} child → "
+                f"{len(filtered_children)} после rerank → "
+                f"{len(parent_groups)} parents → "
+                f"{len(final_matches)} финальных"
             )
 
-            return {'matches': final_matches, 'query': query}
+            return {
+                'matches': final_matches,
+                'query': query,
+                'type': 'parent_child'
+            }
 
         except Exception as e:
-            logger.error(f"❌ Ошибка поиска: {e}")
-            return {'matches': [], 'query': query, 'error': str(e)}
+            logger.error(f"❌ Ошибка Parent-Child поиска: {e}")
+            return {'matches': [], 'query': query, 'error': str(e), 'type': 'error'}
 
-    def _group_by_document(self, chunks: List[Dict]) -> Dict[str, List[Dict]]:
-        """Группирует чанки по document_id (page_id)"""
-        grouped = defaultdict(list)
-        for chunk in chunks:
-            # Извлекаем page_id из chunk_id (формат: "page_id-chunk_num")
-            page_id = chunk['id'].rsplit('-', 1)[0]
-            grouped[page_id].append(chunk)
+    def _group_children_to_parents(self, children: List[Dict]) -> Dict[str, Dict]:
+        """
+        Группирует child-чанки по parent_id и собирает parent_text из metadata
 
-        # Сортировка: документы с бóльшим количеством чанков — выше
-        sorted_docs = sorted(
-            grouped.items(),
-            key=lambda x: (
-                len(x[1]),  # Количество чанков (приоритет)
-                max(c.get('rerank_score', c.get('score', 0)) for c in x[1])  # Максимальный score
-            ),
-            reverse=True
-        )
+        Returns:
+            Dict[parent_id, {
+                'text': str,
+                'metadata': dict,
+                'child_scores': [float]
+            }]
+        """
+        groups = defaultdict(lambda: {'child_scores': [], 'parent_text': '', 'metadata': {}})
+        missing_parent_count = 0
 
-        logger.info(f"📁 Найдено документов: {len(sorted_docs)}")
-        for doc_id, doc_chunks in sorted_docs[:5]:
-            avg_score = sum(c.get('rerank_score', c.get('score', 0)) for c in doc_chunks) / len(doc_chunks)
-            logger.info(f"   • {doc_id}: {len(doc_chunks)} чанков (avg score: {avg_score:.3f})")
-
-        return dict(sorted_docs)
-
-    def _expand_with_smart_neighbors(
-            self,
-            grouped: Dict[str, List[Dict]],
-            query: str,
-            dense_vector: list,
-            sparse_vector: dict
-    ) -> List[Dict]:
-        """расширение контекста с приоритетом релевантных документов и ограничением чанков на документ"""
-        expanded = []
-        seen_ids = set()
-
-        # Ограничение на количество чанков от одного документа
-        max_chunks_per_doc = Config.MAX_CHUNKS_PER_DOC
-
-        # Сначала добавляем ограниченное число лучших чанков из топ-документов
-        for page_id, doc_chunks in list(grouped.items())[:5]:  # Топ-5 документов
-            # Сортируем чанки документа по убыванию релевантности
-            sorted_chunks = sorted(
-                doc_chunks,
-                key=lambda x: x.get('rerank_score', x.get('score', 0)),
-                reverse=True
+        for child in children:
+            # Получаем parent_id из metadata
+            parent_id = (
+                    child.get('metadata', {}).get('parent_id') or
+                    child.get('parent_id') or
+                    self._extract_parent_id_fallback(child)
             )
 
-            # Берём только первые max_chunks_per_doc
-            top_chunks = sorted_chunks[:max_chunks_per_doc]
+            if parent_id:
+                score = child.get('rerank_score', child.get('score', 0))
+                groups[parent_id]['child_scores'].append(score)
 
-            # Добавляем выбранные чанки
-            for chunk in top_chunks:
-                if chunk['id'] not in seen_ids:
-                    expanded.append(chunk)
-                    seen_ids.add(chunk['id'])
-
-            # Определяем окно расширения на основе максимального score в документе
-            max_score = max(c.get('rerank_score', c.get('score', 0)) for c in doc_chunks)
-            if max_score >= 0.7:
-                window = 3
-            elif max_score >= 0.5:
-                window = 2
+                # Берём parent_text из metadata child-чанка
+                if not groups[parent_id]['parent_text']:
+                    groups[parent_id]['parent_text'] = child.get('metadata', {}).get('parent_text', '')
+                    groups[parent_id]['metadata'] = child.get('metadata', {}).copy()
             else:
-                window = 1
+                missing_parent_count += 1
+                logger.warning(f"⚠️ Child chunk missing parent_id: {child.get('id', 'unknown_id')}")
 
-            # Расширяем соседями только для выбранных чанков (не для всех в документе)
-            for chunk in top_chunks:
-                neighbors = self.db.get_neighbors(chunk['id'], window=window)
-                for neighbor in neighbors:
-                    if neighbor['id'] not in seen_ids:
-                        # Сохраняем оценку родительского чанка (с понижающим коэффициентом)
-                        neighbor['score'] = chunk.get('rerank_score',
-                                                      chunk.get('score', 0)) * Config.SEARCH_NEIGHBOR_SCORE_MULTIPLIER
-                        neighbor['rerank_score'] = neighbor['score']
-                        expanded.append(neighbor)
-                        seen_ids.add(neighbor['id'])
+        if missing_parent_count > 0:
+            logger.warning(f"⚠️ {missing_parent_count} из {len(children)} детей без parent_id")
 
-        # Сортировка по score (rerank_score приоритет)
-        expanded = sorted(
-            expanded,
-            key=lambda x: x.get('rerank_score', x.get('score', 0)),
-            reverse=True
-        )
+        logger.info(f"📊 Сгруппировано {len(children)} детей в {len(groups)} родительских групп")
 
-        logger.info(f"🔗 После расширения: {len(expanded)} чанков")
-        return expanded
+        # Преобразуем в формат для final_matches
+        result = {}
+        for parent_id, data in groups.items():
+            result[parent_id] = {
+                'text': data['parent_text'],
+                'metadata': data['metadata'],
+                'child_scores': data['child_scores']
+            }
+
+        return result
+
+    def _extract_parent_id_fallback(self, child: Dict) -> Optional[str]:
+        """Резервный метод извлечения parent_id из шаблона child_id"""
+        child_id = child.get('id', '')
+        if '-child-' in child_id:
+            # Преобразуем child-5 в parent-5
+            parts = child_id.split('-child-')
+            if len(parts) == 2:
+                return f"{parts[0]}-parent-{parts[1]}"
+        return None

@@ -24,6 +24,7 @@ COPY rag_llm/ ./rag_llm/
 COPY telegram_bot/ ./telegram_bot/
 COPY controllers/ ./controllers/
 COPY main.py .
+COPY analyze_db.py .
 
 RUN mkdir -p /app/data/chroma_db /app/.cache /app/logs
 

@@ -1,10 +1,12 @@
 # hybrid_search/embed.py
-from sentence_transformers import SentenceTransformer, CrossEncoder
-from rank_bm25 import BM25Okapi
-from hybrid_search.utils import singleton, logger, Config
-import re
 import os
+import re
+
+from rank_bm25 import BM25Okapi
 from scipy.special import expit
+from sentence_transformers import SentenceTransformer, CrossEncoder
+
+from hybrid_search.utils import singleton, logger, Config
 
 
 @singleton
@@ -16,7 +18,7 @@ class Embed:
         # Dense embedding модель
         logger.info("🔧 Загрузка embedding модели...")
         self.dense_model = SentenceTransformer(
-            "sentence-transformers/all-mpnet-base-v2",
+            Config.DENSE_MODEL,
             device=self.device
         )
 

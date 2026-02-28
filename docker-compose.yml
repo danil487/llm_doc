@@ -8,23 +8,27 @@ services:
       dockerfile: docker/Dockerfile
     container_name: llm-retrieval-app
     environment:
-      # ===== Загрузка =====
-      - FORCE_RELOAD=${FORCE_RELOAD:-false}
-      - SKIP_LOAD=${SKIP_LOAD:-false}
-      - ENABLE_PERIODIC_SYNC=${ENABLE_PERIODIC_SYNC:-true}
-
-      # ===== ChromaDB =====
-      - CHROMA_DB_PATH=/app/data/chroma_db
-      - CHROMA_COLLECTION=${CHROMA_COLLECTION:-confluence_index}
-
       # ===== Confluence =====
       - CONFLUENCE_URL=${CONFLUENCE_URL}
       - CONFLUENCE_API_KEY=${CONFLUENCE_API_KEY}
       - CONFLUENCE_SPACE_NAME=${CONFLUENCE_SPACE_NAME}
 
+      # ===== LLM Provider =====
+      - USE_LLM_API=${USE_LLM_API:-true}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_API_BASE=${LLM_API_BASE:-https://api.deepseek.com}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1024}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-120}
+
       # ===== Ollama =====
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
       - OLLAMA_HOST=http://ollama:11434
+
+      # ===== ChromaDB =====
+      - CHROMA_DB_PATH=/app/data/chroma_db
+      - CHROMA_COLLECTION=${CHROMA_COLLECTION:-confluence_index}
 
       # ===== Redis =====
       - REDIS_HOST=redis
@@ -32,33 +36,43 @@ services:
       - REDIS_DB=0
       - REDIS_TTL_SECONDS=3600
 
+      # ===== Parent-Child Retrieval =====
+      - ENABLE_PARENT_CHILD=${ENABLE_PARENT_CHILD:-true}
+      - CHILD_CHUNK_SIZE=${CHILD_CHUNK_SIZE:-250}
+      - CHILD_CHUNK_OVERLAP=${CHILD_CHUNK_OVERLAP:-30}
+      - PARENT_BLOCK_SIZE=${PARENT_BLOCK_SIZE:-2000}
+      - PARENT_CHUNK_OVERLAP=${PARENT_CHUNK_OVERLAP:-200}
+      - CHILDREN_PER_PARENT=${CHILDREN_PER_PARENT:-8}
+      - MAX_PARENT_BLOCKS=${MAX_PARENT_BLOCKS:-4}
+      - CHILD_MIN_SCORE=${CHILD_MIN_SCORE:-0.30}
+
       # ===== RAG Pipeline =====
       - FORCE_CPU=${FORCE_CPU:-false}
-      - RETRIEVAL_TOP_K=${RETRIEVAL_TOP_K:-12}
-      - RERANK_TOP_K=${RERANK_TOP_K:-10}
-      - RERANK_MIN_SCORE=${RERANK_MIN_SCORE:-0.45}
-      - RERANKER_MODEL=${RERANKER_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
-      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-3500}
+      - RETRIEVAL_TOP_K=${RETRIEVAL_TOP_K:-20}
+      - RERANK_TOP_K=${RERANK_TOP_K:-12}
+      - RERANK_MIN_SCORE=${RERANK_MIN_SCORE:-0.35}
+      - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-large}
+      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-8000}
       - INCLUDE_SECTION_IN_PROMPT=${INCLUDE_SECTION_IN_PROMPT:-true}
       - RESPONSE_FORMAT=${RESPONSE_FORMAT:-markdown}
       - ALWAYS_SHOW_SOURCES=${ALWAYS_SHOW_SOURCES:-true}
       - MAX_SOURCE_LINKS=${MAX_SOURCE_LINKS:-3}
 
-      # ===== Чанкинг =====
-      - CHUNK_SIZE=${CHUNK_SIZE:-850}
-      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-85}
-      - CHUNK_SEPARATORS=${CHUNK_SEPARATORS:-\n\n,\n,. , ,}
-
-      # ===== Расширение контекста =====
-      - MAX_CHUNKS_PER_DOC=${MAX_CHUNKS_PER_DOC:-1}
-      - SEARCH_NEIGHBOR_WINDOW=${SEARCH_NEIGHBOR_WINDOW:-1}
-      - SEARCH_NEIGHBOR_SCORE_MULTIPLIER=${SEARCH_NEIGHBOR_SCORE_MULTIPLIER:-0.8}
+      # ===== Структура контента =====
+      - TABLE_FORMAT=${TABLE_FORMAT:-markdown}
+      - INCLUDE_HEADERS_IN_CHUNKS=${INCLUDE_HEADERS_IN_CHUNKS:-true}
+      - MAX_HEADER_DEPTH=${MAX_HEADER_DEPTH:-3}
 
       # ===== Telegram =====
       - TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL}
       - TELEGRAM_WEBHOOK_PORT=8443
+
+      # ===== Синхронизация =====
+      - FORCE_RELOAD=${FORCE_RELOAD:-false}
+      - SKIP_LOAD=${SKIP_LOAD:-false}
+      - ENABLE_PERIODIC_SYNC=${ENABLE_PERIODIC_SYNC:-true}
 
       # ===== Логирование =====
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -67,22 +81,18 @@ services:
 
     ports:
       - "8443:8443"
-
     volumes:
       - ./logs:/app/logs
       - chroma-data:/app/data/chroma_db
       - hf-cache:/app/.cache
-
     depends_on:
       redis:
         condition: service_healthy
       ollama:
         condition: service_healthy
-
     restart: unless-stopped
     stdin_open: true
     tty: true
-
     mem_limit: 8G
     cpus: 2
 

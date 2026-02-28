@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,25 +20,29 @@ logger = logging.getLogger(__name__)
 
 
 class Config:
-    """✅ Централизованная конфигурация RAG-пайплайна"""
-
-    # ===== Настройки загрузки =====
-    FORCE_RELOAD: bool = os.getenv("FORCE_RELOAD", "false").lower() == "true"
-    SKIP_LOAD: bool = os.getenv("SKIP_LOAD", "false").lower() == "true"
-    ENABLE_PERIODIC_SYNC: bool = os.getenv("ENABLE_PERIODIC_SYNC", "true").lower() == "true"
-
-    # ===== ChromaDB =====
-    CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", "/app/data/chroma_db")
-    CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "confluence_index")
+    """✅ Централизованная конфигурация RAG-пайплайна (Parent-Child)"""
 
     # ===== Confluence =====
     CONFLUENCE_URL: str = os.getenv("CONFLUENCE_URL", "").rstrip('/')
     CONFLUENCE_API_KEY: str = os.getenv("CONFLUENCE_API_KEY", "")
     CONFLUENCE_SPACE_NAME: str = os.getenv("CONFLUENCE_SPACE_NAME", "")
 
+    # ===== LLM Provider =====
+    USE_LLM_API: bool = os.getenv("USE_LLM_API", "false").lower() == "true"
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_API_BASE: str = os.getenv("LLM_API_BASE", "https://api.deepseek.com")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
+    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "120"))
+
     # ===== Ollama =====
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1")
     OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+
+    # ===== ChromaDB =====
+    CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", "/app/data/chroma_db")
+    CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "confluence_index")
 
     # ===== Redis =====
     REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
@@ -47,27 +50,33 @@ class Config:
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     REDIS_TTL_SECONDS: int = int(os.getenv("REDIS_TTL_SECONDS", "3600"))
 
+    # ===== Parent-Child Retrieval =====
+    CHILD_CHUNK_SIZE: int = int(os.getenv("CHILD_CHUNK_SIZE", "250"))
+    CHILD_CHUNK_OVERLAP: int = int(os.getenv("CHILD_CHUNK_OVERLAP", "30"))
+    PARENT_BLOCK_SIZE: int = int(os.getenv("PARENT_BLOCK_SIZE", "2000"))
+    PARENT_CHUNK_OVERLAP: int = int(os.getenv("PARENT_CHUNK_OVERLAP", "200"))
+    CHILDREN_PER_PARENT: int = int(os.getenv("CHILDREN_PER_PARENT", "8"))
+    MAX_PARENT_BLOCKS: int = int(os.getenv("MAX_PARENT_BLOCKS", "4"))
+    CHILD_MIN_SCORE: float = float(os.getenv("CHILD_MIN_SCORE", "0.30"))
+
     # ===== RAG Pipeline =====
     FORCE_CPU: bool = os.getenv("FORCE_CPU", "false").lower() == "true"
-    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "12"))
-    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", "10"))
-    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", "0.45"))
-    RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "3500"))
+    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "20"))
+    RERANK_TOP_K: int = int(os.getenv("RERANK_TOP_K", "12"))
+    RERANK_MIN_SCORE: float = float(os.getenv("RERANK_MIN_SCORE", "0.35"))
+    RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-large")
+    DENSE_MODEL: str = os.getenv("DENSE_MODEL", "sentence-transformers/all-mpnet-base-v2")
+
+    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "8000"))
     INCLUDE_SECTION_IN_PROMPT: bool = os.getenv("INCLUDE_SECTION_IN_PROMPT", "true").lower() == "true"
     RESPONSE_FORMAT: str = os.getenv("RESPONSE_FORMAT", "markdown")
     ALWAYS_SHOW_SOURCES: bool = os.getenv("ALWAYS_SHOW_SOURCES", "true").lower() == "true"
     MAX_SOURCE_LINKS: int = int(os.getenv("MAX_SOURCE_LINKS", "3"))
 
-    # ===== Чанкинг =====
-    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "850"))
-    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "85"))
-    CHUNK_SEPARATORS: str = os.getenv("CHUNK_SEPARATORS", "\n\n,\n,. , ,")
-
-    # ===== Расширение контекста =====
-    MAX_CHUNKS_PER_DOC: int = int(os.getenv("MAX_CHUNKS_PER_DOC", "3"))
-    SEARCH_NEIGHBOR_WINDOW: int = int(os.getenv("SEARCH_NEIGHBOR_WINDOW", "1"))
-    SEARCH_NEIGHBOR_SCORE_MULTIPLIER: float = float(os.getenv("SEARCH_NEIGHBOR_SCORE_MULTIPLIER", "0.8"))
+    # ===== Структура контента =====
+    TABLE_FORMAT: str = os.getenv("TABLE_FORMAT", "markdown")
+    INCLUDE_HEADERS_IN_CHUNKS: bool = os.getenv("INCLUDE_HEADERS_IN_CHUNKS", "true").lower() == "true"
+    MAX_HEADER_DEPTH: int = int(os.getenv("MAX_HEADER_DEPTH", "3"))
 
     # ===== Telegram Bot =====
     TELEGRAM_ENABLED: bool = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
@@ -75,35 +84,37 @@ class Config:
     TELEGRAM_WEBHOOK_URL: str = os.getenv("TELEGRAM_WEBHOOK_URL", "")
     TELEGRAM_WEBHOOK_PORT: int = int(os.getenv("TELEGRAM_WEBHOOK_PORT", "8443"))
 
+    # ===== Синхронизация =====
+    FORCE_RELOAD: bool = os.getenv("FORCE_RELOAD", "false").lower() == "true"
+    SKIP_LOAD: bool = os.getenv("SKIP_LOAD", "false").lower() == "true"
+    ENABLE_PERIODIC_SYNC: bool = os.getenv("ENABLE_PERIODIC_SYNC", "true").lower() == "true"
+
     # ===== Логирование =====
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     @classmethod
     def log(cls):
         """Логирование текущей конфигурации"""
-        logger.info("📋 RAG Pipeline Config:")
-        logger.info(
-            f"   • Загрузка: force_reload={cls.FORCE_RELOAD}, skip_load={cls.SKIP_LOAD}, sync={cls.ENABLE_PERIODIC_SYNC}")
-        logger.info(f"   • ChromaDB: {cls.CHROMA_DB_PATH}/{cls.CHROMA_COLLECTION}")
+        logger.info("📋 RAG Pipeline Config (Parent-Child):")
         logger.info(f"   • Confluence: {cls.CONFLUENCE_URL}/{cls.CONFLUENCE_SPACE_NAME}")
-        logger.info(f"   • Ollama: {cls.OLLAMA_MODEL} @ {cls.OLLAMA_HOST}")
+        logger.info(f"   • ChromaDB: {cls.CHROMA_DB_PATH}/{cls.CHROMA_COLLECTION}")
+
+        if cls.USE_LLM_API:
+            logger.info(f"   • 🌐 LLM API: {cls.LLM_MODEL} @ {cls.LLM_API_BASE}")
+        else:
+            logger.info(f"   • 🖥️  Ollama: {cls.OLLAMA_MODEL} @ {cls.OLLAMA_HOST}")
+
         logger.info(f"   • Redis: {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
-        logger.info(f"   • Retrieval: top_k={cls.RETRIEVAL_TOP_K}")
-        logger.info(f"   • Rerank: top_k={cls.RERANK_TOP_K}, min_score={cls.RERANK_MIN_SCORE}")
-        logger.info(f"   • Chunking: size={cls.CHUNK_SIZE}, overlap={cls.CHUNK_OVERLAP}")
-        logger.info(f"   • Neighbor: window={cls.SEARCH_NEIGHBOR_WINDOW}, mult={cls.SEARCH_NEIGHBOR_SCORE_MULTIPLIER}")
-        logger.info(f"   • Prompt: max_tokens={cls.MAX_CONTEXT_TOKENS}, section={cls.INCLUDE_SECTION_IN_PROMPT}")
-        logger.info(f"   • Response: format={cls.RESPONSE_FORMAT}, sources={cls.ALWAYS_SHOW_SOURCES}")
+        logger.info(
+            f"   • Parent-Child: child={cls.CHILD_CHUNK_SIZE}, parent={cls.PARENT_BLOCK_SIZE}, max_blocks={cls.MAX_PARENT_BLOCKS}")
+        logger.info(
+            f"   • Retrieval: top_k={cls.RETRIEVAL_TOP_K}, rerank_top_k={cls.RERANK_TOP_K}, min_score={cls.RERANK_MIN_SCORE}")
+        logger.info(f"   • Context: max_tokens={cls.MAX_CONTEXT_TOKENS}, tables={cls.TABLE_FORMAT}")
         logger.info(f"   • Telegram: enabled={cls.TELEGRAM_ENABLED}")
         logger.info(f"   • Device: force_cpu={cls.FORCE_CPU}")
-        logger.info(f"   • Max chunks per doc: {cls.MAX_CHUNKS_PER_DOC}")
 
-        # Проверка на переполнение контекста
-        estimated_chunks = cls.RETRIEVAL_TOP_K * (cls.SEARCH_NEIGHBOR_WINDOW * 2 + 1)
-        estimated_tokens = estimated_chunks * (cls.CHUNK_SIZE // 4)
+        estimated_tokens = cls.MAX_PARENT_BLOCKS * (cls.PARENT_BLOCK_SIZE // 4)
         logger.info(f"   • ⚠️  Оценка контекста: ~{estimated_tokens} токенов (лимит: {cls.MAX_CONTEXT_TOKENS})")
-        if estimated_tokens > cls.MAX_CONTEXT_TOKENS * 1.5:
-            logger.warning(f"⚠️  Риск переполнения контекста! Рекомендуется уменьшить RETRIEVAL_TOP_K или CHUNK_SIZE")
 
 
 def load_env_variable(var_name, default=None):
@@ -159,6 +170,7 @@ def make_request(url: str, auth_token: str, params: dict = None, method: str = '
 
             if not response.text.strip():
                 return {}
+
             return response.json()
 
         except requests.exceptions.Timeout:
@@ -185,20 +197,6 @@ def initialize_auth():
     return load_env_variable("CONFLUENCE_API_KEY")
 
 
-def html_to_text(html_data: str) -> str:
-    """Конвертирует HTML в чистый текст с сохранением структуры"""
-    if not html_data:
-        return ""
-    soup = BeautifulSoup(html_data, 'html.parser')
-    for tag in soup(['script', 'style', 'nav', 'header', 'footer']):
-        tag.decompose()
-    for tag in soup.find_all(['br', 'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']):
-        tag.append('\n')
-    text = soup.get_text(separator=' ')
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return ' '.join(lines)
-
-
 def extract_metadata_from_confluence(page_data: dict, page_id: str, api_url: str) -> Dict[str, Any]:
     """Извлекает расширенные метаданные из ответа Confluence API."""
     if not isinstance(page_data, dict):
@@ -207,8 +205,6 @@ def extract_metadata_from_confluence(page_data: dict, page_id: str, api_url: str
             'document_id': str(page_id),
             'title': 'Без названия',
             'section': '',
-            'chunk_index': 0,
-            'total_chunks': 0,
             'url': f"{api_url}/pages/viewpage.action?pageId={page_id}",
             'page_version': '1',
             'last_updated': '',
@@ -237,8 +233,6 @@ def extract_metadata_from_confluence(page_data: dict, page_id: str, api_url: str
         "document_id": str(page_id),
         "title": page_data.get('title', 'Без названия'),
         "section": position_data.get('position', ''),
-        "chunk_index": 0,
-        "total_chunks": 0,
         "url": f"{api_url}/pages/viewpage.action?pageId={page_id}",
         "page_version": str(version_data.get('number', 1)),
         "last_updated": version_data.get('when', ''),
@@ -305,22 +299,6 @@ def parse_datetime(dt_str: str) -> Optional[datetime]:
             return None
 
 
-def truncate_text(text: str, max_tokens: int, model_name: str = "gpt2") -> str:
-    """Обрезает текст до max_tokens с учётом токенизации."""
-    if len(text) <= max_tokens * 4:
-        return text
-    try:
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
-        tokens = tokenizer.encode(text, add_special_tokens=False)
-        if len(tokens) <= max_tokens:
-            return text
-        truncated = tokenizer.decode(tokens[:max_tokens])
-        return truncated + "..."
-    except Exception:
-        return text[:max_tokens * 4] + "..."
-
-
 def format_markdown_response(text: str, sources: List[Dict[str, str]] = None) -> str:
     """Форматирует ответ в Markdown с источниками."""
     if not sources or not Config.ALWAYS_SHOW_SOURCES:
@@ -339,4 +317,5 @@ def format_markdown_response(text: str, sources: List[Dict[str, str]] = None) ->
 
     if source_lines:
         return f"{text}\n\n📎 **Источники**:\n" + "\n".join(source_lines)
+
     return text
