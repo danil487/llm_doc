@@ -1,3 +1,31 @@
+# ===== DEEPSEEK API Configuration =====
+USE_LLM_API=true
+LLM_API_KEY=...
+LLM_API_BASE=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=1024
+LLM_TIMEOUT=120
+
+# ===== Qwen API Configuration =====
+USE_LLM_API=true
+LLM_API_KEY=...
+LLM_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL=qwen-plus
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=2048
+LLM_TIMEOUT=120
+
+# ===== OpenRouter API Configuration (Агрегатор моделей) =====
+USE_LLM_API=true
+LLM_API_KEY=...
+LLM_API_BASE=https://openrouter.ai/api/v1
+LLM_MODEL=deepseek/deepseek-chat
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=2048
+LLM_TIMEOUT=120
+
+
 # 🚀 Enhanced LLM Retrieval System (RAG)
 
 **Система интеллектуального поиска по документации Confluence с использованием RAG (Retrieval-Augmented Generation)**

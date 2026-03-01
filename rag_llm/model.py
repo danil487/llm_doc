@@ -98,7 +98,6 @@ class Model:
     def _get_api_response(self, messages: list[dict]) -> dict:
         """Запрос к API (DeepSeek/Qwen)"""
         try:
-            logger.info('Запрос в модель:', messages)
             response = self.api_client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,

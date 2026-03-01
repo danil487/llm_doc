@@ -110,5 +110,4 @@ class ParentChildChunker:
                 }
             })
 
-        logger.debug(f"📦 {page_id}: {len(results)} child-parent пар")
         return results

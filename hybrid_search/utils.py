@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class Config:
-    """✅ Централизованная конфигурация RAG-пайплайна (Parent-Child)"""
+    """Централизованная конфигурация RAG-пайплайна (Parent-Child)"""
 
     # ===== Confluence =====
     CONFLUENCE_URL: str = os.getenv("CONFLUENCE_URL", "").rstrip('/')

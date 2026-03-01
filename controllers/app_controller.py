@@ -47,7 +47,7 @@ class AppController:
 
         if first_run:
             logger.info("=" * 60)
-            logger.info("🔄 ПЕРВИЧНАЯ ИНДЕКСАЦИЯ (40-60 минут)")
+            logger.info("🔄 ПЕРВИЧНАЯ ИНДЕКСАЦИЯ (~ 4-6 часов)")
             logger.info("=" * 60)
             self._db_updater = UpdateDatabase()
             self._db_updater.load_all()
@@ -55,11 +55,6 @@ class AppController:
         else:
             logger.info("✅ База уже проиндексирована")
 
-        # Проверка Ollama
-        from rag_llm.model import Model
-        llm = Model()
-        if not llm.check_model_available():
-            logger.warning(f"⚠️  Модель {llm.model_name} не найдена в Ollama!")
 
     def _check_first_run(self) -> bool:
         """Проверяет, был ли уже выполнен первоначальный индекс"""
@@ -132,13 +127,6 @@ class AppController:
         answer = self._get_response().query_model(self.session_id, query, matches)
         logger.info(answer)
         logger.info("-" * 60)
-
-        if matches.get('matches'):
-            logger.info("\n📎 Источники:")
-            for i, match in enumerate(matches['matches'][:3], 1):
-                doc_id = match.get('id', 'N/A')
-                score = match.get('score', 0)
-                logger.info(f"   {i}. {doc_id} (score: {score:.4f})")
 
     def _sync_now(self):
         """Принудительная синхронизация"""

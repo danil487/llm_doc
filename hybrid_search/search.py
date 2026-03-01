@@ -128,8 +128,6 @@ class SemanticSearch:
         if missing_parent_count > 0:
             logger.warning(f"⚠️ {missing_parent_count} из {len(children)} детей без parent_id")
 
-        logger.info(f"📊 Сгруппировано {len(children)} детей в {len(groups)} родительских групп")
-
         # Преобразуем в формат для final_matches
         result = {}
         for parent_id, data in groups.items():

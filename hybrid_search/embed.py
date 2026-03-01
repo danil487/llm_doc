@@ -98,7 +98,6 @@ class Embed:
         # Предсказываем scores
         try:
             scores = self.reranker.predict(pairs)
-            logger.info(f"Raw scores: {scores}")
             # ПРИМЕНЯЕМ SIGMOID для нормализации в 0-1
             scores = expit(scores)
 
