@@ -1,5 +1,8 @@
 # main.py
+from typing import Optional
+
 from controllers import AppController, BotController, SyncController
+from controllers.webapp_controller import WebAppController
 from hybrid_search.utils import logger, Config
 import signal
 import sys
@@ -11,8 +14,9 @@ class Application:
 
     def __init__(self):
         self.app_controller = AppController()
-        self.bot_controller = None
-        self.sync_controller = None
+        self.bot_controller: Optional[BotController] = None
+        self.webapp_controller: Optional[WebAppController] = None
+        self.sync_controller: Optional[SyncController] = None
         self._setup_signals()
 
     def _setup_signals(self):
@@ -46,7 +50,12 @@ class Application:
                 self.bot_controller = BotController()
                 self.bot_controller.start()
 
-            # 5. Основной цикл (CLI)
+            # 5. Запуск WebApp
+            if Config.WEB_APP_ENABLE:
+                self.webapp_controller = WebAppController()
+                self.webapp_controller.start()
+
+            # 6. Основной цикл (CLI)
             self.app_controller.run_cli()
 
         except Exception as e:
@@ -55,10 +64,12 @@ class Application:
             raise
 
     def shutdown(self):
-        """✅ Корректное завершение"""
+        """ Завершение работы """
         logger.info("\n🧹 Завершение работы...")
         if self.bot_controller:
             self.bot_controller.stop()
+        if self.webapp_controller:
+            self.webapp_controller.stop()
         if self.sync_controller:
             self.sync_controller.stop()
         self.app_controller.cleanup()

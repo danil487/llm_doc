@@ -7,6 +7,7 @@ import chromadb
 from chromadb.config import Settings
 
 from hybrid_search.utils import singleton, logger, Config
+from hybrid_search.dynamic_config import dynamic_config
 
 
 @singleton
@@ -155,7 +156,7 @@ class Database:
                         n_results: int = None, where: Dict = None) -> List[Dict]:
         """Поиск child-чанков"""
         try:
-            n_results = n_results or Config.RETRIEVAL_TOP_K
+            n_results = n_results or dynamic_config.get('RETRIEVAL_TOP_K')
 
             if isinstance(dense_vector[0], list):
                 dense_vector = dense_vector[0]

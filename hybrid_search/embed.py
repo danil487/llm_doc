@@ -7,6 +7,7 @@ from scipy.special import expit
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from hybrid_search.utils import singleton, logger, Config
+from hybrid_search.dynamic_config import dynamic_config
 
 
 @singleton
@@ -110,11 +111,11 @@ class Embed:
             chunk['rerank_score'] = float(score)
 
         # Фильтруем по порогу и сортируем
-        filtered = [c for c in chunks if c.get('rerank_score', 0) >= Config.RERANK_MIN_SCORE]
+        filtered = [c for c in chunks if c.get('rerank_score', 0) >= dynamic_config.get('RERANK_MIN_SCORE')]
         sorted_chunks = sorted(filtered, key=lambda x: x.get('rerank_score', 0), reverse=True)
 
         # Возвращаем топ-K
-        return sorted_chunks[:Config.RERANK_TOP_K]
+        return sorted_chunks[:dynamic_config.get('RERANK_TOP_K')]
 
     def fit_bm25(self, documents: list[str]):
         """Инициализация BM25 на корпусе документов"""

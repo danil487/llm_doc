@@ -182,3 +182,4 @@ class TelegramBot:
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Логирование ошибок"""
         logger.error(f"❌ Telegram error: {context.error}")
+

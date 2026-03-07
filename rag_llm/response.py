@@ -5,7 +5,7 @@ from typing import Dict
 
 from hybrid_search.utils import singleton, logger, Config, format_markdown_response
 from rag_llm import model, rag, context
-
+from hybrid_search.dynamic_config import dynamic_config
 
 @singleton
 class Response:
@@ -78,7 +78,7 @@ class Response:
             page_id = doc_id.split('-')[0]
 
             # Добавляем только если ID упомянут ИЛИ включён ALWAYS_SHOW_SOURCES
-            if page_id in mentioned_ids or Config.ALWAYS_SHOW_SOURCES:
+            if page_id in mentioned_ids or dynamic_config.get('ALWAYS_SHOW_SOURCES'):
                 if page_id in seen_ids:
                     continue
                 seen_ids.add(page_id)

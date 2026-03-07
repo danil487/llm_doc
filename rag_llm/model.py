@@ -1,6 +1,6 @@
 # rag_llm/model.py
 from hybrid_search.utils import singleton, logger, Config
-
+from hybrid_search.dynamic_config import dynamic_config
 
 @singleton
 class Model:
@@ -31,8 +31,8 @@ class Model:
             self.model_name = Config.LLM_MODEL
             self.api_base = Config.LLM_API_BASE
             self.api_key = Config.LLM_API_KEY
-            self.temperature = Config.LLM_TEMPERATURE
-            self.max_tokens = Config.LLM_MAX_TOKENS
+            self.temperature = dynamic_config.get('LLM_TEMPERATURE')
+            self.max_tokens = dynamic_config.get('LLM_MAX_TOKENS')
             self.timeout = Config.LLM_TIMEOUT
 
             if not self.api_key:

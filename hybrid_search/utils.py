@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
+from hybrid_search.dynamic_config import dynamic_config
+
 
 load_dotenv()
 
@@ -83,6 +85,10 @@ class Config:
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_WEBHOOK_URL: str = os.getenv("TELEGRAM_WEBHOOK_URL", "")
     TELEGRAM_WEBHOOK_PORT: int = int(os.getenv("TELEGRAM_WEBHOOK_PORT", "8443"))
+
+    # ===== WebApp =====
+    WEB_APP_ENABLE: bool = os.getenv("WEB_APP_ENABLE", False)
+    ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "change-me")
 
     # ===== Синхронизация =====
     FORCE_RELOAD: bool = os.getenv("FORCE_RELOAD", "false").lower() == "true"
@@ -301,15 +307,15 @@ def parse_datetime(dt_str: str) -> Optional[datetime]:
 
 def format_markdown_response(text: str, sources: List[Dict[str, str]] = None) -> str:
     """Форматирует ответ в Markdown с источниками."""
-    if not sources or not Config.ALWAYS_SHOW_SOURCES:
+    if not sources or not dynamic_config.get('ALWAYS_SHOW_SOURCES'):
         return text
 
     source_lines = []
-    for src in sources[:Config.MAX_SOURCE_LINKS]:
+    for src in sources[:dynamic_config.get('MAX_SOURCE_LINKS')]:
         title = src.get('title', 'Документ')
         url = src.get('url', '#')
         section = src.get('section', '')
-        if section and Config.INCLUDE_SECTION_IN_PROMPT:
+        if section and dynamic_config.get('INCLUDE_SECTION_IN_PROMPT'):
             display_title = f"{title} — {section}"
         else:
             display_title = title

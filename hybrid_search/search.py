@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 
 from hybrid_search.database import Database
+from hybrid_search.dynamic_config import dynamic_config
 from hybrid_search.embed import Embed
 from hybrid_search.utils import singleton, logger, Config
 
@@ -17,7 +18,7 @@ class SemanticSearch:
     def search(self, query: str, n_results: int = None) -> Dict:
         """Parent-Child поиск"""
         try:
-            n_results = n_results or Config.RETRIEVAL_TOP_K
+            n_results = n_results or dynamic_config.get('RETRIEVAL_TOP_K')
 
             # 1. Поиск child-чанков
             dense_vector = self.embedder.embed_text(query)
@@ -37,7 +38,7 @@ class SemanticSearch:
             # 3. Фильтрация по порогу
             filtered_children = [
                 c for c in reranked_children
-                if c.get('rerank_score', c.get('score', 0)) >= Config.CHILD_MIN_SCORE
+                if c.get('rerank_score', c.get('score', 0)) >= dynamic_config.get('CHILD_MIN_SCORE')
             ]
 
             if not filtered_children:
@@ -71,7 +72,7 @@ class SemanticSearch:
                 final_matches,
                 key=lambda x: x.get('score', 0),
                 reverse=True
-            )[:Config.RERANK_TOP_K]
+            )[:dynamic_config.get('RERANK_TOP_K')]
 
             logger.info(
                 f"📊 Parent-Child поиск: "

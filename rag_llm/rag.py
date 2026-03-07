@@ -3,7 +3,7 @@ from typing import List, Dict
 
 from hybrid_search.database import Database
 from hybrid_search.utils import singleton, logger, Config
-
+from hybrid_search.dynamic_config import dynamic_config
 
 @singleton
 class RAG:
@@ -40,7 +40,7 @@ class RAG:
         context_parts = []
         total_tokens = 0
 
-        for i, doc in enumerate(documents[:Config.MAX_PARENT_BLOCKS], 1):
+        for i, doc in enumerate(documents[:dynamic_config.get('MAX_PARENT_BLOCKS')], 1):
             metadata = doc.get('metadata', {})
 
             header = f"[ИСТОЧНИК {i}] — {doc['title']}"
@@ -50,7 +50,7 @@ class RAG:
             section = doc.get('section', '')
             if url:
                 block += f"🔗 {url}"
-                if section and Config.INCLUDE_SECTION_IN_PROMPT:
+                if section and dynamic_config.get('INCLUDE_SECTION_IN_PROMPT'):
                     block += f" → {section}"
                 block += "\n"
 
@@ -59,8 +59,8 @@ class RAG:
             block += f"{'=' * 60}\n\n"
 
             block_tokens = len(block) // 4
-            if total_tokens + block_tokens > Config.MAX_CONTEXT_TOKENS:
-                logger.debug(f"⚠️  Достигнут лимит контекста ({Config.MAX_CONTEXT_TOKENS} токенов)")
+            if total_tokens + block_tokens > dynamic_config.get('MAX_CONTEXT_TOKENS'):
+                logger.debug(f"⚠️  Достигнут лимит контекста ({dynamic_config.get('MAX_CONTEXT_TOKENS')} токенов)")
                 break
 
             context_parts.append(block)
